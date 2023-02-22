@@ -1,0 +1,5 @@
+plugin_path: infrao
+github_organization_slug: my-organization
+project_slug: infrao
+transifex_coordinator: replace-me
+transifex_organization: replace-me
