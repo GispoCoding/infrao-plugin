@@ -12,6 +12,6 @@ if debugger in {"debugpy", "ptvsd", "pydevd"}:
 
 
 def classFactory(iface: QgisInterface):  # noqa N802
-    from infrao.plugin import Plugin
+    from infrao.infrao_plugin import Plugin
 
     return Plugin()
