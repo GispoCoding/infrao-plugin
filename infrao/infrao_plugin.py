@@ -1,3 +1,5 @@
+import os
+
 from typing import Callable, List, Optional
 
 from qgis.PyQt.QtCore import QCoreApplication, QTranslator
@@ -9,6 +11,13 @@ from infrao.qgis_plugin_tools.tools.custom_logging import setup_logger, teardown
 from infrao.qgis_plugin_tools.tools.i18n import setup_translation
 from infrao.qgis_plugin_tools.tools.resources import plugin_name
 
+'''
+from infrao.tools_xml.import_xml import XMLImporter
+from infrao.tools_xml.export_xml import XMLExporter
+'''
+
+from .ui.init_db import Dialog
+
 
 class Plugin:
     """QGIS Plugin Implementation."""
@@ -16,6 +25,8 @@ class Plugin:
     name = plugin_name()
 
     def __init__(self) -> None:
+        self.iface = iface
+        
         setup_logger(Plugin.name)
 
         # initialize locale
@@ -101,10 +112,33 @@ class Plugin:
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
         self.add_action(
             "",
-            text=Plugin.name,
-            callback=self.run,
+            text='Import xml',
+            callback=self.import_xml,
             parent=iface.mainWindow(),
-            add_to_toolbar=False,
+            add_to_toolbar=True,
+        )
+
+        self.add_action(
+            "",
+            text='Export xml',
+            callback=self.export_xml,
+            parent=iface.mainWindow(),
+            add_to_toolbar=True,
+        )
+
+        self.add_action(
+            "",
+            text='Initialize database',
+            callback=self.initialize_database,
+            parent=iface.mainWindow(),
+            add_to_toolbar=True,
+        )
+        self.add_action(
+            "",
+            text='Import xml from API',
+            callback=self.import_xml_from_api,
+            parent=iface.mainWindow(),
+            add_to_toolbar=True,
         )
 
     def onClosePlugin(self) -> None:  # noqa N802
@@ -118,6 +152,15 @@ class Plugin:
             iface.removeToolBarIcon(action)
         teardown_logger(Plugin.name)
 
-    def run(self) -> None:
-        """Run method that performs all the real work"""
-        print("Hello QGIS plugin")
+    def import_xml(self) -> None:
+        print("Import xml")
+
+    def export_xml(self) -> None:
+        print("Export xml")
+        
+    def initialize_database(self) -> None:
+        dialog = Dialog(self.iface)
+        dialog.exec_()
+
+    def import_xml_from_api(self) -> None:
+        print("Import xml from OGC API Features")
