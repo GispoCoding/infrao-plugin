@@ -10,7 +10,7 @@
 
 ## Usage
 
-The plugin currently is able to initialize a PostgreSQL database based on an initial version of database schema (which is built according to the InfraO- xsd schema). A working PostgreSQL database with the PostGIS extension is required.
+The plugin currently is able to initialize a PostgreSQL database based on an initial version of a database schema (which is built according to the InfraO- xsd schema). A working PostgreSQL database with the PostGIS extension is required.
 
 ## Installation
 
