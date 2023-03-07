@@ -8,6 +8,14 @@
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
+## Usage
+
+The plugin currently is able to initialize a PostgreSQL database based on an initial version of database schema (which is built according to the InfraO- xsd schema). A working PostgreSQL database with the PostGIS extension is required.
+
+## Installation
+
+The plugin can be downloaded and installed by moving the contents to your QGIS profiles' plugin folder. The folder can be found from QGIS > Settings > User profiles > Open active profile folder. The plugin must be activated from QGIS > Manage and install extensions. A restart of QGIS might be required.
+
 ## Development
 
 Refer to [development](docs/development.md) for developing this QGIS3 plugin.
