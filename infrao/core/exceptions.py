@@ -9,3 +9,9 @@ class AuthConfigException(QgsPluginException):
 
 class InitializationCancelled(QgsPluginException):
     pass
+
+class UnableToDropDatabase(QgsPluginException):
+    pass
+
+class UnableToConnectToDb(QgsPluginException):
+    pass
