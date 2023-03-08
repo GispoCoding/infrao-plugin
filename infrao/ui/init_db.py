@@ -108,6 +108,7 @@ class Dialog(QDialog, FORM_CLASS):
             raise UnableToConnectToDb
         return db_found
 
+
     def create_db(self, conn_params):
         try:
             with(psycopg2.connect(**conn_params)) as conn:
@@ -175,6 +176,7 @@ class Dialog(QDialog, FORM_CLASS):
         except:
             LOGGER.info("Unable to connect to database.")
             pass
+
 
     def populate_dbComboBox(self):
         self.dbComboBox.clear()
