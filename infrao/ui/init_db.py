@@ -20,7 +20,7 @@ from ..ui.ask_permission import DbAskPermissionDialog
 from ..qgis_plugin_tools.tools.custom_logging import bar_msg
 from ..qgis_plugin_tools.tools.i18n import tr
 from ..qgis_plugin_tools.tools.resources import load_ui, plugin_name
-from ..qgis_plugin_tools.tools.settings import get_setting
+#from ..qgis_plugin_tools.tools.settings import get_setting
 
 FORM_CLASS = load_ui('db_init.ui')
 LOGGER = logging.getLogger(plugin_name())
@@ -30,7 +30,6 @@ class Dialog(QDialog, FORM_CLASS):
     def __init__(self, iface, parent=None):
         QDialog.__init__(self, parent)
         self.setupUi(self)
-        QWidget.setWindowTitle(self, "Initialize database")
         self.iface = iface
         self.is_running = False
         
@@ -42,11 +41,14 @@ class Dialog(QDialog, FORM_CLASS):
 
     def init_database(self):
         agreed = self.agreedCheckBox.isChecked()
+        if not (agreed):
+            self.permissionLabel.setText("Cannot continue without permission.")
         if (agreed):
             selected_db = self.dbComboBox.currentText()
             conn_params = get_db_connection_params(selected_db)
             LOGGER.info(f"ATTEMPTING TO INITIALIZE {selected_db}")
             if (conn_params['password'] ==  None) or (conn_params ['user'] == None):
+                LOGGER.info("No username and/or password found.")
                 ask_credentials_dlg = DbAskCredentialsDialog()
                 result = ask_credentials_dlg.exec_()
                 if (result):
@@ -59,6 +61,7 @@ class Dialog(QDialog, FORM_CLASS):
                 if (db_found):
                     db_found = self.drop_db(conn_params)
                 if not (db_found):
+                    conn_params["dbname"] = 'postgres'
                     pwd = self.create_db(conn_params)
                     self.run_sql(pwd, conn_params, selected_db)
             except psycopg2.OperationalError:
@@ -68,15 +71,18 @@ class Dialog(QDialog, FORM_CLASS):
 
     
     def check_existing_db(self, conn_params):
-        with(psycopg2.connect(**conn_params)) as conn:
-            conn.autocommit = True
-            with conn.cursor() as curs:
-                LOGGER.info("Checking for infrao database.")
-                curs.execute("select * from pg_database;")
-                check_db = curs.fetchall()
-                db_found = any('infrao' in word for word in check_db)
-                LOGGER.info("Database infrao found." if (db_found) else "Database infrao not found.")
-        return db_found
+        LOGGER.info("Checking for existing InfraO database.")
+        try:
+            with(psycopg2.connect(**conn_params)) as conn:
+                conn.autocommit = True
+                with conn.cursor() as curs:
+                    curs.execute("select * from pg_database;")
+                    check_db = curs.fetchall()
+                    db_found = any('infrao' in word for word in check_db)
+                    LOGGER.info("InfraO database found." if (db_found) else "InfraO database not found.")
+            return db_found
+        except:
+            LOGGER.warning("Unable to connect to database.")
 
 
     def drop_db(self, conn_params):
@@ -111,6 +117,7 @@ class Dialog(QDialog, FORM_CLASS):
                     ask_password_dlg.exec_()
                     ask_password_dlg.close()
                     password = ask_password_dlg.pwdLineEdit.text()
+                    LOGGER.info("Creating InfraO database and infrao_admin role.")
                     curs.execute("DROP ROLE IF EXISTS infrao_admin;")
                     curs.execute(f"CREATE ROLE infrao_admin WITH PASSWORD '{password}' CREATEROLE LOGIN;")
                     curs.execute("CREATE DATABASE infrao TABLESPACE=pg_default OWNER=infrao_admin;")
@@ -132,7 +139,7 @@ class Dialog(QDialog, FORM_CLASS):
 
 
     def run_sql(self, pwd, conn_params, dbname):
-        #LOGGER.info(pwd, conn_params)
+        LOGGER.info("Connecting to InfraO database and creating PostGIS extension if it doesn't exist.")
         conn_params["dbname"] = 'infrao'
         with(psycopg2.connect(**conn_params)) as conn:
             conn.autocommit = True
@@ -140,30 +147,33 @@ class Dialog(QDialog, FORM_CLASS):
                 curs.execute("CREATE EXTENSION IF NOT EXISTS postgis;")
         conn_params["user"] = 'infrao_admin'
         conn_params["password"] = pwd
+        LOGGER.info("Attempting to connect to InfraO database.")
         try:
             with(psycopg2.connect(**conn_params)) as conn:
-                database = conn_params.get('dbname')
-                LOGGER.info(f'Connected to database {database}.')
                 conn.autocommit = True
                 with conn.cursor() as curs:
                     try:
+                        LOGGER.info("Attempting to read sql file.")
                         with open(f"{os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir, 'resources'))}\V1.0.0__initial.sql", "r") as f:
                             LOGGER.info("File opened.")
                             curs.execute(f.read())
+                            LOGGER.info("Refreshing list of connections.")
                             settings = QSettings()
                             root_path = f'PostgreSQL/connections/{dbname}'
                             #settings.value()
                             settings.setValue(f'{root_path}/database', conn_params.get('dbname'))
-                            settings.setValue(f'{root_path}/username', conn_params.get('infrao_admin'))
+                            settings.setValue(f'{root_path}/username', 'infrao_admin')
                             settings.setValue(f'{root_path}/password', conn_params.get(pwd))
                             iface.mainWindow().findChildren(QWidget, 'Browser')[0].refresh()
+                            iface.messageBar().pushMessage(dbname, "database succesfully initialized.", level=3, duration=10)
+                            self.close()
 
                     except Exception as e:
                         LOGGER.info(f"{os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir, 'resources'))}\V1.0.0__initial.sql")
                         LOGGER.info("Reading sql file failed.")
                         LOGGER.info(e)
         except:
-            LOGGER.info("New connection to database failed.")
+            LOGGER.info("Unable to connect to database.")
             pass
 
     def populate_dbComboBox(self):
