@@ -1,14 +1,20 @@
 import logging
-from typing import Dict
+import zipfile
+import binascii
+import io
+import re
+from zipfile import ZipFile
+from typing import Dict, Union, List, Optional
+
 
 from PyQt5.QtCore import QSettings
-from qgis.core import QgsDataSourceUri, QgsAuthMethodConfig, QgsApplication
+from qgis.core import QgsAuthManager, QgsAuthMethodConfig, QgsApplication
 
-from ..core.exceptions import AuthConfigException, DatabaseNotSetException
+from ..core.exceptions import AuthConfigException, DatabaseNotSetException, ProjectInInvalidFormat
 from ..qgis_plugin_tools.tools.custom_logging import bar_msg
 from ..qgis_plugin_tools.tools.i18n import tr
 from ..qgis_plugin_tools.tools.resources import plugin_name
-from ..qgis_plugin_tools.tools.settings import parse_value, get_setting
+from ..qgis_plugin_tools.tools.settings import parse_value, set_setting
 
 LOGGER = logging.getLogger(plugin_name())
 PG_CONNECTIONS = "PostgreSQL/connections"
@@ -19,6 +25,29 @@ QGS_SETTINGS_PSYCOPG2_PARAM_MAP = {
     'port': 'port',
     'username': 'user'
 }
+
+def fix_data_sources_from_binary_projects(conn_params, auth_cfg_id, contents):
+    host = conn_params['host']
+    port = conn_params['port']
+    dbname = conn_params['dbname']
+    ret_vals = []
+    conn_string = f"dbname='{dbname}' host={host} port={port} sslmode=disable authcfg={auth_cfg_id} key="
+    for i, content in enumerate(contents):
+        z = io.BytesIO()
+        z.write(content)
+        files = extract_zip(z)
+        #assert len(files) == 2
+        qgs_f_key = [f for f in files.keys() if f.endswith('.qgs')][0]
+        qgs_proj_content = files[qgs_f_key].decode('utf-8')
+        # Replace all connection string from layers with the db specific connection string
+        qgs_proj_content = re.sub(r'dbname=.*host=.*port=\d{4}.*key=', conn_string, qgs_proj_content)
+        if conn_string not in qgs_proj_content:
+            raise ProjectInInvalidFormat()
+        files[qgs_f_key] = bytes(qgs_proj_content, 'utf-8')
+        ret_vals.append(create_in_memory_zip(files))
+    return ret_vals
+
+
 
 def get_existing_database_connections() -> (str):
     """
@@ -32,29 +61,19 @@ def get_existing_database_connections() -> (str):
     LOGGER.debug(f"Connections: {connections}")
     return connections
 
-'''
-def get_db_connection_uri() -> QgsDataSourceUri:
-    """
-
-    :param plan:
-    :return:
-    """
-    conn_params = get_db_connection_params()
-    uri = QgsDataSourceUri()
-    uri.setConnection(conn_params['host'], conn_params['port'], conn_params['dbname'])
-    return uri
+def extract_zip(input_zip):
+    input_zip = ZipFile(input_zip)
+    return {name: input_zip.read(name) for name in input_zip.namelist()}
 
 
-def get_connection_name() -> str:
-    """
-    :return: Name of the PostGIS connection that will be used by the plugin
-    """
-    value = get_setting(value.key, "", str)
-    if value == "":
-        raise DatabaseNotSetException()
-    return value
+def create_in_memory_zip(contents: Dict[str, bytes]) -> bytes:
+    zip_buffer = io.BytesIO()
+    with ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        for file_name, data in contents.items():
+            zip_file.writestr(file_name, io.BytesIO(data).getvalue())
+    return binascii.hexlify(zip_buffer.getvalue())
 
-'''
+
 def get_db_connection_params(con_name) -> Dict[str, str]:
     s = QSettings()
     s.beginGroup(f"{PG_CONNECTIONS}/{con_name}")
@@ -91,3 +110,34 @@ def get_db_connection_params(con_name) -> Dict[str, str]:
                 bar_msg=bar_msg(tr(f"Check auth config with id: {auth_cfg_id}")))
 
     return params
+
+
+def set_auth_cfg(auth_cfg_key: str, auth_cfg_id: str, username: str, password: str) -> None:
+    """
+    :param plan:
+    :param auth_cfg_id:
+    :param username:
+    :param password:
+    """
+    # noinspection PyArgumentList
+    auth_mgr: QgsAuthManager = QgsApplication.authManager()
+    if auth_cfg_id in auth_mgr.availableAuthMethodConfigs().keys():
+        config = QgsAuthMethodConfig()
+        auth_mgr.loadAuthenticationConfig(auth_cfg_id, config, True)
+        config.setConfig('username', username)
+        config.setConfig('password', password)
+        if not config.isValid():
+            raise AuthConfigException('Invalid username or password')
+        auth_mgr.updateAuthenticationConfig(config)
+    else:
+        config = QgsAuthMethodConfig()
+        config.setId(auth_cfg_id)
+        config.setName(auth_cfg_id)
+        config.setMethod('Basic')
+        config.setConfig('username', username)
+        config.setConfig('password', password)
+        if not config.isValid():
+            raise AuthConfigException('Invalid username or password')
+        auth_mgr.storeAuthenticationConfig(config)
+
+    set_setting(auth_cfg_key, auth_cfg_id, internal=False)
