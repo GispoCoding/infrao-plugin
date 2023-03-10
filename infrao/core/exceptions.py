@@ -15,3 +15,6 @@ class UnableToDropDatabase(QgsPluginException):
 
 class UnableToConnectToDb(QgsPluginException):
     pass
+
+class ProjectInInvalidFormat(QgsPluginException):
+    pass

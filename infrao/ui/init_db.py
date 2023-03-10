@@ -2,24 +2,28 @@ import logging
 import psycopg2
 import psycopg2.errors
 import os
+import io
+import re
 
 from ..qgis_plugin_tools.tools.resources import load_ui
 
-from qgis.core import QgsApplication
+from qgis.core import QgsApplication, QgsProject, QgsAuthManager, QgsAuthMethodConfig
 from qgis.utils import iface
 
 from PyQt5 import QtGui
 from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QDialog, QWidget
 
-from ..core.exceptions import InitializationCancelled, UnableToDropDatabase, UnableToConnectToDb
-from ..db.db_utils import get_existing_database_connections, get_db_connection_params
+from ..core.exceptions import InitializationCancelled, UnableToDropDatabase, UnableToConnectToDb, ProjectInInvalidFormat
+from ..db.db_utils import get_existing_database_connections, get_db_connection_params, set_auth_cfg, fix_data_sources_from_binary_projects
 from ..ui.ask_password import DbAskPasswordDialog
 from ..ui.ask_credentials import DbAskCredentialsDialog
 from ..ui.ask_permission import DbAskPermissionDialog
 from ..qgis_plugin_tools.tools.custom_logging import bar_msg
 from ..qgis_plugin_tools.tools.i18n import tr
+from ..qgis_plugin_tools.tools.network import fetch
 from ..qgis_plugin_tools.tools.resources import load_ui, plugin_name
+
 #from ..qgis_plugin_tools.tools.settings import get_setting
 
 FORM_CLASS = load_ui('db_init.ui')
@@ -36,14 +40,21 @@ class Dialog(QDialog, FORM_CLASS):
         self.populate_dbComboBox()
 
         self.closeButton.clicked.connect(self.close)
+        self.agreedCheckBox.clicked.connect(self.enable_init_button)
+        self.btnDbInitialize.setEnabled(self.agreedCheckBox.isChecked())
         self.btnDbInitialize.clicked.connect(self.init_database)
+        self.openProjButton.clicked.connect(self.open_project)
+        self.refreshProjButton.clicked.connect(self.populate_projectComboBox)
+        #self.projectComboBox.highlighted.connect(self.populate_projectComboBox)
         
 
     def init_database(self):
+
         agreed = self.agreedCheckBox.isChecked()
         if not (agreed):
             self.permissionLabel.setText("Cannot continue without permission.")
         if (agreed):
+            self.permissionLabel.setText("")
             selected_db = self.dbComboBox.currentText()
             conn_params = get_db_connection_params(selected_db)
             LOGGER.info(f"ATTEMPTING TO INITIALIZE {selected_db}")
@@ -64,6 +75,8 @@ class Dialog(QDialog, FORM_CLASS):
                     conn_params["dbname"] = 'postgres'
                     pwd = self.create_db(conn_params)
                     self.run_sql(pwd, conn_params, selected_db)
+                    if self.projectCheckBox.isChecked():
+                        self.add_project(pwd)
             except psycopg2.OperationalError:
                 LOGGER.warning("Unable to connect to database.")
                 pass
@@ -167,7 +180,7 @@ class Dialog(QDialog, FORM_CLASS):
                             settings.setValue(f'{root_path}/password', conn_params.get(pwd))
                             iface.mainWindow().findChildren(QWidget, 'Browser')[0].refresh()
                             iface.messageBar().pushMessage(dbname, "database succesfully initialized.", level=3, duration=10)
-                            self.close()
+                            #self.close()
 
                     except Exception as e:
                         LOGGER.info(f"{os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir, 'resources'))}\V1.0.0__initial.sql")
@@ -177,9 +190,100 @@ class Dialog(QDialog, FORM_CLASS):
             LOGGER.info("Unable to connect to database.")
             pass
 
+    
+    def add_project(self, pwd):
+        selected_db = self.dbComboBox.currentText()
+        conn_params = get_db_connection_params(selected_db)
+        
+        LOGGER.info("Adding project")
+        f = open(f"{os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir, 'resources'))}\infrao_tyotila.sql", 'r', encoding='utf-16')
+        content = f.read()
+        f.close()
+        proj_bytes = [line.split(',')[5][4:-3] for line in content.split('\n') if
+                    line.startswith('INSERT INTO public.qgis_projects')]
+        byts = [bytes.fromhex(b) for b in proj_bytes]
+        ret_vals = fix_data_sources_from_binary_projects(conn_params, auth_cfg_id=selected_db, contents=byts)
+        for i in range(len(proj_bytes)):
+            content = content.replace(proj_bytes[i], ret_vals[i].decode('utf-8'))
+        #LOGGER.info(content)
+        set_auth_cfg(selected_db,selected_db,'infrao_admin',pwd)
+            #print(bytes.fromhex(proj_bytes[0]).decode('utf-16'))
+            #LOGGER.info(content)
+            #LOGGER.info(proj_bytes)
+        conn_params["dbname"] = 'infrao'
+        conn_params["user"] = 'postgres'###
+        conn_params["password"] = 'postgres'###
+
+        try:
+            with(psycopg2.connect(**conn_params)) as conn:
+                conn.autocommit = True
+                with conn.cursor() as curs:
+                    curs.execute(content)
+        except psycopg2.errors.OperationalError:
+            LOGGER.info("Unable to connect to database.")
+            pass
+
+        self.populate_projectComboBox()
+        
+   
+    def enable_init_button(self):
+        self.btnDbInitialize.setEnabled(self.agreedCheckBox.isChecked())
+
 
     def populate_dbComboBox(self):
         self.dbComboBox.clear()
         connections = get_existing_database_connections()
         for conn in connections:
             self.dbComboBox.addItem(conn)
+
+
+    def open_project(self):
+        selected_db = self.dbComboBox.currentText()
+        conn_params = get_db_connection_params(selected_db)
+        auth_mgr: QgsAuthManager = QgsApplication.authManager()
+        if selected_db in auth_mgr.availableAuthMethodConfigs().keys():
+            config = QgsAuthMethodConfig()
+            auth_mgr.loadAuthenticationConfig(selected_db, config, True)
+            user = config.config('username')
+            password = config.config('password')
+
+        host=conn_params['host']
+        port=conn_params['port']
+        sslmode = 'disable'
+        dbname=conn_params['dbname']
+        schema='public'
+        projectname=self.projectComboBox.currentText()
+        uri = f'postgresql://{user}:{password}@{host}:{port}?&dbname={dbname}&schema={schema}&project={projectname}'
+        QgsProject.instance().read(uri)
+        LOGGER.info(f"Open project {self.projectComboBox.currentText()}")
+
+    
+    def populate_projectComboBox(self):
+        selected_db = self.dbComboBox.currentText()
+        conn_params = get_db_connection_params(selected_db)
+
+        auth_mgr: QgsAuthManager = QgsApplication.authManager()
+        if selected_db in auth_mgr.availableAuthMethodConfigs().keys():
+            config = QgsAuthMethodConfig()
+            auth_mgr.loadAuthenticationConfig(selected_db, config, True)
+            conn_params['user'] = config.config('username')
+            conn_params['password'] = config.config('password')
+
+        ## TODO: get conn_params earlier
+        if (conn_params['password'] ==  None) or (conn_params ['user'] == None):
+                LOGGER.info("No username and/or password found.")
+                ask_credentials_dlg = DbAskCredentialsDialog()
+                result = ask_credentials_dlg.exec_()
+                if (result):
+                    conn_params['user'] = ask_credentials_dlg.userLineEdit.text()
+                    conn_params['password'] = ask_credentials_dlg.pwdLineEdit.text()
+                else:
+                    raise InitializationCancelled("Canceling",bar_msg("Cannot initialize without username and password."))
+        with psycopg2.connect(**conn_params) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT name FROM qgis_projects;")
+                available_projects = cur.fetchall()
+        projects = [proj[0] for proj in available_projects]
+
+        self.projectComboBox.clear()
+        self.projectComboBox.addItems(projects)
