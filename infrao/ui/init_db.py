@@ -45,11 +45,9 @@ class Dialog(QDialog, FORM_CLASS):
         self.btnDbInitialize.clicked.connect(self.init_database)
         self.openProjButton.clicked.connect(self.open_project)
         self.refreshProjButton.clicked.connect(self.populate_projectComboBox)
-        #self.projectComboBox.highlighted.connect(self.populate_projectComboBox)
         
 
     def init_database(self):
-        self.permissionLabel.setText("")
         selected_db = self.dbComboBox.currentText()
         if selected_db == "":
             iface.messageBar().pushMessage("Tietokantayhteyttä ei ole valittu.", level=2, duration=5)
@@ -182,14 +180,10 @@ class Dialog(QDialog, FORM_CLASS):
         ret_vals = fix_data_sources_from_binary_projects(conn_params, auth_cfg_id=selected_db, contents=byts)
         for i in range(len(proj_bytes)):
             content = content.replace(proj_bytes[i], ret_vals[i].decode('utf-8'))
-        #LOGGER.info(content)
         set_auth_cfg(selected_db,selected_db,'infrao_admin',pwd)
-            #print(bytes.fromhex(proj_bytes[0]).decode('utf-16'))
-            #LOGGER.info(content)
-            #LOGGER.info(proj_bytes)
         conn_params["dbname"] = 'infrao'
-        conn_params["user"] = 'postgres'###
-        conn_params["password"] = 'postgres'###
+        conn_params["user"] = 'infrao_admin'###
+        conn_params["password"] = pwd###
 
         try:
             with(psycopg2.connect(**conn_params)) as conn:
@@ -223,12 +217,25 @@ class Dialog(QDialog, FORM_CLASS):
             iface.messageBar().pushMessage("Työtilaa ei ole valittu.", level=2, duration=5)
             return
         conn_params = get_db_connection_params(selected_db)
+        user = conn_params['user']
+        password = conn_params['password']
         auth_mgr: QgsAuthManager = QgsApplication.authManager()
         if selected_db in auth_mgr.availableAuthMethodConfigs().keys():
             config = QgsAuthMethodConfig()
             auth_mgr.loadAuthenticationConfig(selected_db, config, True)
             user = config.config('username')
             password = config.config('password')
+
+        if (password ==  None) or (user == None):
+                LOGGER.info("No username and/or password found.")
+                ask_credentials_dlg = DbAskCredentialsDialog()
+                result = ask_credentials_dlg.exec_()
+                if (result):
+                    user = ask_credentials_dlg.userLineEdit.text()
+                    password = ask_credentials_dlg.pwdLineEdit.text()
+                else:
+                    iface.messageBar().pushMessage("Ei voi avata ilman käyttäjänimeä tai salasanaa.", level=1, duration=5)
+                    return
 
         host=conn_params['host']
         port=conn_params['port']
@@ -248,7 +255,7 @@ class Dialog(QDialog, FORM_CLASS):
             return
         conn_params_ = get_db_connection_params(selected_db)
         conn_params_['dbname'] = "infrao"
-        conn_params = self.ask_credentials(conn_params_, selected_db)
+        conn_params = self.get_auth_parameters(conn_params_, selected_db)
 
         if (conn_params['password'] ==  None) or (conn_params ['user'] == None):
                 LOGGER.info("No username and/or password found.")
@@ -258,7 +265,7 @@ class Dialog(QDialog, FORM_CLASS):
                     conn_params['user'] = ask_credentials_dlg.userLineEdit.text()
                     conn_params['password'] = ask_credentials_dlg.pwdLineEdit.text()
                 else:
-                    iface.messageBar().pushMessage("Ei voi alustaa ilman käyttäjänimeä tai salasanaa.", level=1, duration=5)
+                    iface.messageBar().pushMessage("Ei voi päivittää ilman käyttäjänimeä tai salasanaa.", level=1, duration=5)
                     return
         try:
             with psycopg2.connect(**conn_params) as conn:
@@ -267,6 +274,9 @@ class Dialog(QDialog, FORM_CLASS):
                     available_projects = cur.fetchall()
         except psycopg2.OperationalError:
             self.db_connection_msg()
+            return
+        except psycopg2.errors.UndefinedTable:
+            iface.messageBar().pushMessage("Työtilaa ei löytynyt tietokannasta.", level=1, duration=5)
             return
         projects = [proj[0] for proj in available_projects]
 
@@ -291,4 +301,4 @@ class Dialog(QDialog, FORM_CLASS):
             auth_mgr.loadAuthenticationConfig(selected_db, config, True)
             conn_params['user'] = config.config('username')
             conn_params['password'] = config.config('password')
-            return conn_params
+        return conn_params
