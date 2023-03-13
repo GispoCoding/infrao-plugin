@@ -9,7 +9,7 @@ from qgis.utils import iface
 
 from infrao.qgis_plugin_tools.tools.custom_logging import setup_logger, teardown_logger
 from infrao.qgis_plugin_tools.tools.i18n import setup_translation
-from infrao.qgis_plugin_tools.tools.resources import plugin_name
+from infrao.qgis_plugin_tools.tools.resources import plugin_name, resources_path
 
 '''
 from infrao.tools_xml.import_xml import XMLImporter
@@ -111,31 +111,31 @@ class Plugin:
     def initGui(self) -> None:  # noqa N802
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
         self.add_action(
-            "",
-            text='Import xml',
+            resources_path('icons','imxmlicon.png'),
+            text='Tuo xml',
             callback=self.import_xml,
             parent=iface.mainWindow(),
             add_to_toolbar=True,
         )
 
         self.add_action(
-            "",
-            text='Export xml',
+            resources_path('icons','exxmlicon.png'),
+            text='Vie xml',
             callback=self.export_xml,
             parent=iface.mainWindow(),
             add_to_toolbar=True,
         )
 
         self.add_action(
-            "",
-            text='Initialize database',
+            resources_path('icons','dbicon.png'),
+            text='Alusta tietokanta',
             callback=self.initialize_database,
             parent=iface.mainWindow(),
             add_to_toolbar=True,
         )
         self.add_action(
-            "",
-            text='Import xml from API',
+            resources_path('icons','apixmlicon.png'),
+            text='Tuo xml rajapinnalta',
             callback=self.import_xml_from_api,
             parent=iface.mainWindow(),
             add_to_toolbar=True,
@@ -153,14 +153,14 @@ class Plugin:
         teardown_logger(Plugin.name)
 
     def import_xml(self) -> None:
-        print("Import xml")
+        print("Tuo xml")
 
     def export_xml(self) -> None:
-        print("Export xml")
+        print("Vie xml")
         
     def initialize_database(self) -> None:
         dialog = Dialog(self.iface)
         dialog.exec_()
 
     def import_xml_from_api(self) -> None:
-        print("Import xml from OGC API Features")
+        print("Tuo xml OGC API Features:ta")
