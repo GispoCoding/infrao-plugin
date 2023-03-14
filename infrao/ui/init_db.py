@@ -157,7 +157,7 @@ class Dialog(QDialog, FORM_CLASS):
                             #self.close()
 
                     except Exception as e:
-                        LOGGER.info(f"{os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir, 'resources'))}\V1.0.0__initial.sql")
+                        LOGGER.info(resources_path('V1.0.0__initial.sql'))
                         LOGGER.info("Reading sql file failed.")
                         LOGGER.info(e)
         except:
@@ -171,7 +171,7 @@ class Dialog(QDialog, FORM_CLASS):
         conn_params = get_db_connection_params(selected_db)
         
         LOGGER.info("Adding project")
-        f = open(f"{os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir, 'resources'))}\infrao_tyotila.sql", 'r', encoding='utf-16')
+        f = open(resources_path('infrao_tyotila.sql'), 'r', encoding='utf-16')
         content = f.read()
         f.close()
         proj_bytes = [line.split(',')[5][4:-3] for line in content.split('\n') if
