@@ -100,30 +100,33 @@ class Dialog(QDialog, FORM_CLASS):
         
 
     def create_db(self, conn_params, password):
+        #Old way of connecting used to avoid a psycopg2 error when running CREATE DATABASE command in newer psycopg2 versions (which QGIS uses on Linux)
         try:
-            with(psycopg2.connect(**conn_params)) as conn:
-                conn.autocommit = True
-                with conn.cursor() as curs:
-                    LOGGER.info("Creating InfraO database and infrao_admin role.")
-                    curs.execute("DROP ROLE IF EXISTS infrao_admin;")
-                    curs.execute(f"CREATE ROLE infrao_admin WITH PASSWORD '{password}' CREATEROLE LOGIN;")
-                    curs.execute("CREATE DATABASE infrao TABLESPACE=pg_default OWNER=infrao_admin;")
-                    LOGGER.info('Checking for PostGIS extension.')
-                    curs.execute("select * from pg_extension;")
-                    check_ext = curs.fetchall()
-                    postgis_found = any('postgis' in word for word in check_ext)
-                    LOGGER.info("PostGIS extension found." if (postgis_found) else "PostGIS extension not found.")
-                    if not (postgis_found):
-                        LOGGER.info("Attempting to create extension postgis.")
-                        try:
-                            curs.execute("create extension postgis;")
-                        except psycopg2.errors.FeatureNotSupported as exception:
-                            LOGGER.warning("Unable to create extension.")
-                            LOGGER.warning(exception)
+            conn = psycopg2.connect(**conn_params)
+            conn.autocommit = True
+            with conn.cursor() as curs:
+                LOGGER.info("Creating InfraO database and infrao_admin role.")
+                curs.execute("DROP ROLE IF EXISTS infrao_admin;")
+                curs.execute(f"CREATE ROLE infrao_admin WITH PASSWORD '{password}' CREATEROLE LOGIN;")
+                curs.execute("CREATE DATABASE infrao TABLESPACE=pg_default OWNER=infrao_admin;")
+                LOGGER.info('Checking for PostGIS extension.')
+                curs.execute("select * from pg_extension;")
+                check_ext = curs.fetchall()
+                postgis_found = any('postgis' in word for word in check_ext)
+                LOGGER.info("PostGIS extension found." if (postgis_found) else "PostGIS extension not found.")
+                if not (postgis_found):
+                    LOGGER.info("Attempting to create extension postgis.")
+                    try:
+                        curs.execute("create extension postgis;")
+                    except psycopg2.errors.FeatureNotSupported as exception:
+                        LOGGER.warning("Unable to create extension.")
+                        LOGGER.warning(exception)
         except psycopg2.OperationalError:
             self.db_connection_msg()
             return
-        return password
+        finally:
+            if conn:
+                conn.close()
 
 
     def run_sql(self, pwd, conn_params, dbname):
