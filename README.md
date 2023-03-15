@@ -21,6 +21,6 @@ The plugin can be downloaded and installed by moving the contents to your QGIS p
 Refer to [development](docs/development.md) for developing this QGIS3 plugin.
 
 ## License
-This plugin is licenced with[GNU General Public License, version 2](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
+This plugin is licenced with [GNU General Public License, version 2](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 See [LICENSE](LICENSE) for more information.
