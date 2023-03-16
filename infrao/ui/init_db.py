@@ -68,6 +68,8 @@ class Dialog(QDialog, FORM_CLASS):
 
 
         db_found = self.check_existing_db(conn_params)
+        if db_found == None:
+            return
         if (db_found):
             iface.messageBar().pushMessage("InfraO- tietokanta löytyi jo palvelimelta. Uudelleenalustus vaatii tietokannan poistamisen.", level=2, duration=5)
             return
