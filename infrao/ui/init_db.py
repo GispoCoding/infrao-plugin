@@ -80,6 +80,7 @@ class Dialog(QDialog, FORM_CLASS):
                 return
             conn_params["dbname"] = 'postgres'
             self.create_db(conn_params, new_pwd)
+            self.check_postgis(conn_params)
             self.run_sql(new_pwd, conn_params, selected_db)
             self.add_project(new_pwd)
 
@@ -111,18 +112,6 @@ class Dialog(QDialog, FORM_CLASS):
                 curs.execute("DROP ROLE IF EXISTS infrao_admin;")
                 curs.execute(f"CREATE ROLE infrao_admin WITH PASSWORD '{password}' CREATEROLE LOGIN;")
                 curs.execute("CREATE DATABASE infrao TABLESPACE=pg_default OWNER=infrao_admin;")
-                LOGGER.info('Checking for PostGIS extension.')
-                curs.execute("select * from pg_extension;")
-                check_ext = curs.fetchall()
-                postgis_found = any('postgis' in word for word in check_ext)
-                LOGGER.info("PostGIS extension found." if (postgis_found) else "PostGIS extension not found.")
-                if not (postgis_found):
-                    LOGGER.info("Attempting to create extension postgis.")
-                    try:
-                        curs.execute("create extension postgis;")
-                    except psycopg2.errors.FeatureNotSupported as exception:
-                        LOGGER.warning("Unable to create extension.")
-                        LOGGER.warning(exception)
         except psycopg2.OperationalError:
             self.db_connection_msg()
             return
@@ -287,6 +276,31 @@ class Dialog(QDialog, FORM_CLASS):
 
         self.projectComboBox.clear()
         self.projectComboBox.addItems(projects)
+
+
+    def check_postgis(self, conn_params):
+        try:
+            with(psycopg2.connect(**conn_params)) as conn:
+                conn.autocommit = True
+                with conn.cursor() as curs:
+                    LOGGER.info('Checking for PostGIS extension.')
+                    curs.execute("select * from pg_extension;")
+                    check_ext = curs.fetchall()
+                    postgis_found = any('postgis' in word for word in check_ext)
+                    LOGGER.info("PostGIS extension found." if (postgis_found) else "PostGIS extension not found.")
+                    if not (postgis_found):
+                        LOGGER.info("Attempting to create extension postgis.")
+                        try:
+                            curs.execute("create extension postgis;")
+                        except psycopg2.errors.FeatureNotSupported as exception:
+                            LOGGER.warning("Unable to create extension.")
+                            LOGGER.warning(exception)
+        except psycopg2.OperationalError:
+            self.db_connection_msg()
+            LOGGER.warning("Unable to connect to database.")
+            return
+            
+
 
 
     def ask_new_password(self):
