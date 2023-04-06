@@ -1,3 +1,22 @@
+#  Gispo Ltd., hereby disclaims all copyright interest in the program infrao-plugin
+#  Copyright (C) 2023 Gispo Ltd (https://www.gispo.fi/).
+#
+#
+#  This file is part of infrao-plugin.
+#
+#  infrao-plugin is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  infrao-plugin is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with infrao-plugin.  If not, see <https://www.gnu.org/licenses/>.
+
 import logging
 import psycopg2
 import psycopg2.errors
@@ -103,6 +122,7 @@ class Dialog(QDialog, FORM_CLASS):
         
 
     def create_db(self, conn_params, password):
+        LOGGER.info(conn_params)
         #Old way of connecting used to avoid a psycopg2 error when running CREATE DATABASE command in newer psycopg2 versions (which QGIS uses on Linux)
         try:
             conn = psycopg2.connect(**conn_params)
@@ -111,7 +131,8 @@ class Dialog(QDialog, FORM_CLASS):
                 LOGGER.info("Creating InfraO database and infrao_admin role.")
                 curs.execute("DROP ROLE IF EXISTS infrao_admin;")
                 curs.execute(f"CREATE ROLE infrao_admin WITH PASSWORD '{password}' CREATEROLE LOGIN;")
-                curs.execute("CREATE DATABASE infrao TABLESPACE=pg_default OWNER=infrao_admin;")
+                curs.execute(f"GRANT infrao_admin TO postgres;")
+                curs.execute("CREATE DATABASE infrao OWNER=infrao_admin TABLESPACE=ts_infrao;")
         except psycopg2.OperationalError:
             self.db_connection_msg()
             return
@@ -284,7 +305,7 @@ class Dialog(QDialog, FORM_CLASS):
                 conn.autocommit = True
                 with conn.cursor() as curs:
                     LOGGER.info('Checking for PostGIS extension.')
-                    curs.execute("select * from pg_extension;")
+                    curs.execute("select extname from pg_extension;")
                     check_ext = curs.fetchall()
                     postgis_found = any('postgis' in word for word in check_ext)
                     LOGGER.info("PostGIS extension found." if (postgis_found) else "PostGIS extension not found.")

@@ -1,3 +1,22 @@
+#  Gispo Ltd., hereby disclaims all copyright interest in the program infrao-plugin
+#  Copyright (C) 2023 Gispo Ltd (https://www.gispo.fi/).
+#
+#
+#  This file is part of infrao-plugin.
+#
+#  infrao-plugin is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  infrao-plugin is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with infrao-plugin.  If not, see <https://www.gnu.org/licenses/>.
+
 import logging
 import zipfile
 import binascii
@@ -31,7 +50,7 @@ def fix_data_sources_from_binary_projects(conn_params, auth_cfg_id, contents):
     port = conn_params['port']
     dbname = conn_params['dbname']
     ret_vals = []
-    conn_string = f"dbname='{dbname}' host={host} port={port} sslmode=disable authcfg={auth_cfg_id} key="
+    conn_string = f"dbname='{dbname}' host={host} port={port} sslmode=allow authcfg={auth_cfg_id} key="
     for i, content in enumerate(contents):
         z = io.BytesIO()
         z.write(content)
@@ -77,9 +96,12 @@ def create_in_memory_zip(contents: Dict[str, bytes]) -> bytes:
 def get_db_connection_params(con_name) -> Dict[str, str]:
     s = QSettings()
     s.beginGroup(f"{PG_CONNECTIONS}/{con_name}")
+    
     auth_cfg_id = parse_value(s.value("authcfg"))
     username_saved = parse_value(s.value("saveUsername"))
     pwd_saved = parse_value(s.value("savePassword"))
+    sslmode = parse_value(s.value("sslmode"))
+    LOGGER.info(sslmode)
 
     params = {}
 
