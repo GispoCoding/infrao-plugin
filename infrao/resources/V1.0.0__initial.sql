@@ -17,6 +17,7 @@
 --  You should have received a copy of the GNU General Public License
 --  along with infrao-plugin.  If not, see <https://www.gnu.org/licenses/>.
 
+
 -- Database generated with pgModeler (PostgreSQL Database Modeler).
 -- pgModeler version: 0.9.4
 -- PostgreSQL version: 13.0
