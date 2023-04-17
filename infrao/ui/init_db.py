@@ -132,7 +132,7 @@ class Dialog(QDialog, FORM_CLASS):
                 curs.execute("DROP ROLE IF EXISTS infrao_admin;")
                 curs.execute(f"CREATE ROLE infrao_admin WITH PASSWORD '{password}' CREATEROLE LOGIN;")
                 curs.execute(f"GRANT infrao_admin TO postgres;")
-                curs.execute("CREATE DATABASE infrao OWNER=infrao_admin TABLESPACE=ts_infrao;")
+                curs.execute("CREATE DATABASE infrao OWNER=infrao_admin;") #TODO: tablespace
         except psycopg2.OperationalError:
             self.db_connection_msg()
             return
