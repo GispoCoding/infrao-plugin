@@ -30,9 +30,10 @@ from infrao.qgis_plugin_tools.tools.custom_logging import setup_logger, teardown
 from infrao.qgis_plugin_tools.tools.i18n import setup_translation
 from infrao.qgis_plugin_tools.tools.resources import plugin_name, resources_path
 
-from .xml_tools.exporter.xml_exporter import xml_export
+from .xml_tools.importer.xml_importer import xml_import
 
 from .ui.init_db import Dialog
+from .xml_tools.exporter.xml_exporter import ExportDialog
 
 
 class Plugin:
@@ -169,10 +170,12 @@ class Plugin:
         teardown_logger(Plugin.name)
 
     def import_xml(self) -> None:
-        print("Tuo xml")
+        xml_import()
 
     def export_xml(self) -> None:
-        xml_export()
+        dialog = ExportDialog(self.iface)
+        dialog.exec_()
+        #xml_export()
         
     def initialize_database(self) -> None:
         dialog = Dialog(self.iface)

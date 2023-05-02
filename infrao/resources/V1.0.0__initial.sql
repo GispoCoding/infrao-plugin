@@ -1,23 +1,3 @@
---  Gispo Ltd., hereby disclaims all copyright interest in the program infrao-plugin
---  Copyright (C) 2023 Gispo Ltd (https://www.gispo.fi/).
---
---
---  This file is part of infrao-plugin.
---
---  infrao-plugin is free software: you can redistribute it and/or modify
---  it under the terms of the GNU General Public License as published by
---  the Free Software Foundation, either version 2 of the License, or
---  (at your option) any later version.
---
---  infrao-plugin is distributed in the hope that it will be useful,
---  but WITHOUT ANY WARRANTY; without even the implied warranty of
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
---  GNU General Public License for more details.
---
---  You should have received a copy of the GNU General Public License
---  along with infrao-plugin.  If not, see <https://www.gnu.org/licenses/>.
-
-
 -- Database generated with pgModeler (PostgreSQL Database Modeler).
 -- pgModeler version: 0.9.4
 -- PostgreSQL version: 13.0
@@ -51,7 +31,7 @@ ALTER SCHEMA koodistot OWNER TO infrao_admin;
 
 -- object: kohteet | type: SCHEMA --
 -- DROP SCHEMA IF EXISTS kohteet CASCADE;
-CREATE SCHEMA IF NOT EXISTS kohteet;
+CREATE SCHEMA kohteet;
 -- ddl-end --
 ALTER SCHEMA kohteet OWNER TO infrao_admin;
 -- ddl-end --
@@ -347,8 +327,12 @@ ALTER SEQUENCE kohteet.viheralueenosa_id_seq OWNER TO infrao_admin;
 -- DROP TABLE IF EXISTS viheralue.viheralue CASCADE;
 CREATE TABLE viheralue.viheralue (
 	fid bigint NOT NULL GENERATED ALWAYS AS IDENTITY ,
+	identifier uuid DEFAULT gen_random_uuid(),
 	nimi text,
-	geom geometry(MULTIPOLYGONZ, 3067),
+	alkuhetki timestamptz,
+	loppuhetki timestamptz,
+	metatieto text,
+	geom geometry(POLYGONZ, 3067),
 	CONSTRAINT viheralue_pk PRIMARY KEY (fid)
 );
 -- ddl-end --
@@ -474,12 +458,14 @@ ALTER SEQUENCE public.katualue_id_seq OWNER TO infrao_admin;
 -- DROP TABLE IF EXISTS katualue.katualue CASCADE;
 CREATE TABLE katualue.katualue (
 	fid bigint NOT NULL GENERATED ALWAYS AS IDENTITY ,
+	identifier uuid DEFAULT gen_random_uuid(),
 	nimi text,
-	geom geometry(MULTIPOLYGONZ, 3067),
-	CONSTRAINT katualue_fid_pk PRIMARY KEY (fid)
+	alkuhetki timestamptz,
+	loppuhetki timestamptz,
+	metatieto text,
+	geom geometry(POLYGONZ, 3067),
+	CONSTRAINT katualue_pk PRIMARY KEY (fid)
 );
--- ddl-end --
-COMMENT ON TABLE katualue.katualue IS E'TODO:\n- sisaltaaKatualueenOsan -> relation?';
 -- ddl-end --
 ALTER TABLE katualue.katualue OWNER TO infrao_admin;
 -- ddl-end --
@@ -502,10 +488,14 @@ ALTER SEQUENCE public.katualueenosa_id_seq OWNER TO infrao_admin;
 -- object: viheralue.viheralueenosa | type: TABLE --
 -- DROP TABLE IF EXISTS viheralue.viheralueenosa CASCADE;
 CREATE TABLE viheralue.viheralueenosa (
-	fid bigint NOT NULL,
-	omistaja varchar(255),
-	haltija varchar(255),
-	kunnossapitaja varchar(255),
+	fid bigint NOT NULL GENERATED ALWAYS AS IDENTITY ,
+	identifier uuid DEFAULT gen_random_uuid(),
+	metatieto text,
+	alkuhetki timestamptz,
+	loppuhetki timestamptz,
+	omistaja text,
+	haltija text,
+	kunnossapitaja text,
 	perusparannusvuosi smallint,
 	valmistumisvuosi smallint,
 	suojelualuekytkin boolean,
@@ -517,10 +507,8 @@ CREATE TABLE viheralue.viheralueenosa (
 	talvihoidonluokka_id integer,
 	puhtaanapitoluokka_id integer,
 	muutoshoitoluokka_id integer,
-	sisaltaakasvillisuus integer,
-	sisaltaavaruste integer,
-	geom geometry(MULTIPOLYGON, 3067),
 	fid_viheralue bigint,
+	geom geometry(POLYGONZ, 3067),
 	CONSTRAINT viheralueenosa_fid_pk PRIMARY KEY (fid)
 );
 -- ddl-end --
@@ -581,26 +569,31 @@ ALTER SEQUENCE public.liikunta_id_seq OWNER TO infrao_admin;
 -- DROP TABLE IF EXISTS katualue.katualueenosa CASCADE;
 CREATE TABLE katualue.katualueenosa (
 	fid bigint NOT NULL GENERATED ALWAYS AS IDENTITY ,
+	identifier uuid DEFAULT gen_random_uuid(),
+	metatieto text,
+	alkuhetki timestamptz,
+	loppuhetki timestamptz,
 	paatostieto_id integer,
-	kunnossapito varchar(255),
+	omistaja text,
+	haltija text,
+	kunnossapitaja text,
+	kunnossapito text,
 	leveys double precision,
 	perusparannusvuosi integer,
 	pinta_ala double precision,
 	pituus double precision,
-	puhtaanapito varchar(255),
-	talvikunnossapito varchar(255),
-	kuuluukatualueeseen_id integer,
-	sisaltaakeskilinja_id integer,
+	puhtaanapito text,
+	talvikunnossapito text,
+	valmistumisvuosi integer,
 	luokka_id integer,
-	kunnossapitoluokka_id integer,
 	katuosanlaji_id integer,
-	pintamateriaali_id integer,
 	viherosanlajityypi_id integer,
+	pintamateriaali_id integer,
+	kunnossapitoluokka_id integer,
 	suunnitelmalinkkitieto_id integer,
 	talvihoidonluokka_id integer,
-	sisaltaakasvillisuus_id integer,
-	geom geometry(MULTIPOLYGONZ, 3067),
 	fid_katualue bigint,
+	geom geometry(POLYGONZ, 3067),
 	CONSTRAINT katualueenosa_pk PRIMARY KEY (fid)
 );
 -- ddl-end --
@@ -9363,13 +9356,6 @@ COMMENT ON COLUMN abstraktit.template_table.alkuhetki IS E'Kohteen luontipäivä
 COMMENT ON COLUMN abstraktit.template_table.loppuhetki IS E'Milloin kohde on poistettu. Tämän avulla voidaan tunnistaa poistetut kohteet, jos järjestelmät tukevat historiatietojen tallentamista';
 -- ddl-end --
 
--- object: katualue_fk | type: CONSTRAINT --
--- ALTER TABLE katualue.katualueenosa DROP CONSTRAINT IF EXISTS katualue_fk CASCADE;
-ALTER TABLE katualue.katualueenosa ADD CONSTRAINT katualue_fk FOREIGN KEY (fid_katualue)
-REFERENCES katualue.katualue (fid) MATCH FULL
-ON DELETE SET NULL ON UPDATE CASCADE;
--- ddl-end --
-
 -- object: viheralue_fk | type: CONSTRAINT --
 -- ALTER TABLE viheralue.viheralueenosa DROP CONSTRAINT IF EXISTS viheralue_fk CASCADE;
 ALTER TABLE viheralue.viheralueenosa ADD CONSTRAINT viheralue_fk FOREIGN KEY (fid_viheralue)
@@ -10358,6 +10344,13 @@ ON DELETE SET NULL ON UPDATE CASCADE;
 -- ALTER TABLE katualue.ajoratamerkinta DROP CONSTRAINT IF EXISTS ajoratamerkintatyyppi_fk CASCADE;
 ALTER TABLE katualue.ajoratamerkinta ADD CONSTRAINT ajoratamerkintatyyppi_fk FOREIGN KEY (cid_ajoratamerkintatyyppi)
 REFERENCES koodistot.ajoratamerkintatyyppi (cid) MATCH FULL
+ON DELETE SET NULL ON UPDATE CASCADE;
+-- ddl-end --
+
+-- object: katualue_fk | type: CONSTRAINT --
+-- ALTER TABLE katualue.katualueenosa DROP CONSTRAINT IF EXISTS katualue_fk CASCADE;
+ALTER TABLE katualue.katualueenosa ADD CONSTRAINT katualue_fk FOREIGN KEY (fid_katualue)
+REFERENCES katualue.katualue (fid) MATCH FULL
 ON DELETE SET NULL ON UPDATE CASCADE;
 -- ddl-end --
 
