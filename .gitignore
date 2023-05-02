@@ -1,4 +1,5 @@
 infrao/i18n
+infrao/xml_tools/importer
 venv/
 .venv/
 start_ide.bat

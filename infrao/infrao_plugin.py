@@ -175,7 +175,6 @@ class Plugin:
     def export_xml(self) -> None:
         dialog = ExportDialog(self.iface)
         dialog.exec_()
-        #xml_export()
         
     def initialize_database(self) -> None:
         dialog = Dialog(self.iface)
