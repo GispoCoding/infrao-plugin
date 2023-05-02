@@ -342,3 +342,4 @@ class Dialog(QDialog, FORM_CLASS):
             conn_params['user'] = config.config('username')
             conn_params['password'] = config.config('password')
         return conn_params
+        
