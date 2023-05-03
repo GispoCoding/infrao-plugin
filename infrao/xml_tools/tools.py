@@ -486,3 +486,9 @@ AREA_INCLUDED_NAMES = {
     "katualue": [INFRAO_KATUALUE_TAGS["SISALTAAKATUALUEENOSAN"][0]],
     "viheralue": [INFRAO_VIHERALUE_TAGS["SISALTAAVIHERALUEENOSAN"][0]],
 }
+
+INFRAO_DIFF_SIJAINTI_TAGS = {
+    "infrao:tarkkaSijaintitieto": "TARKKASIJAINTITIETO",
+    "infrao:sijainti": "SIJAINTI",
+    "infrao:sijaintitieto": "SIJAINTITIETO",
+}

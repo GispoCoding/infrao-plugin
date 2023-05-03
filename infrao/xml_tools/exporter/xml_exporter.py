@@ -123,8 +123,7 @@ from ..tools import (
     SCHEMA_TABLE_NAMES,
     AREA_NAMES,
     AREA_INCLUDED_NAMES,
-
-
+    INFRAO_DIFF_SIJAINTI_TAGS,
 )
 
 FORM_CLASS = load_ui('export.ui')
@@ -225,6 +224,11 @@ def add_elements(schema, table, dict_tags, gml_fm, result_dicts, conn_params):
         belonging_checked = False
         gml_id = {GML_ID:f"{base_element.removeprefix('infrao:')}.{values[i]['YKSILOINTITIETO']}"}
         f = ET.SubElement(gml_fm, base_element, attrib=gml_id)
+        if base_element not in [INFRAO_KESKILINJA, INFRAO_VIHERALUE, INFRAO_KATUALUE]:
+            for idx in INFRAO_DIFF_SIJAINTI_TAGS.keys():
+                if INFRAO_DIFF_SIJAINTI_TAGS[idx] in values[i].keys():
+                    c_sij_parent = ET.SubElement(f, idx)
+                    c_sij = ET.SubElement(c_sij_parent, "infrao:Sijainti")
         for key in values[i]:
             xml_tag = dict_tags[key][0]
             if values[i][key] != NULL:#TODO: add missing elements
@@ -239,9 +243,6 @@ def add_elements(schema, table, dict_tags, gml_fm, result_dicts, conn_params):
                         c_gml_geom = ET.fromstring(gml_string)
                         c_base.append(c_gml_geom)
                     else:
-                        c_base = ET.SubElement(f, xml_tag)
-                        if 'c_sij' not in locals():
-                            c_sij = ET.SubElement(c_base, "infrao:Sijainti")
                         gml_string = values[i][key]
                         ns = ' xmlns:gml="http://www.opengis.net/gml/3.2"'
                         ET.register_namespace("gml", "http://www.opengis.net/gml/3.2")
@@ -254,13 +255,8 @@ def add_elements(schema, table, dict_tags, gml_fm, result_dicts, conn_params):
                         c_gml_geom = ET.fromstring(gml_string)
                         c_io_geom.append(c_gml_geom)
                 elif xml_tag in ["infrao:sijaintiepavarmuus", "infrao:luontitapa"]:
-                    if 'c_sij' not in locals():
-                        c_sij = ET.SubElement(c_base, "infrao:Sijainti")
-                        c_sij_c = ET.SubElement(c_sij, xml_tag)
-                        c_sij_c.text = str(values[i][key])
-                    else:
-                        c_sij_c = ET.SubElement(c_sij, xml_tag)
-                        c_sij_c.text = str(values[i][key])
+                    c_sij_c = ET.SubElement(c_sij, xml_tag)
+                    c_sij_c.text = str(values[i][key])
                 elif xml_tag in AREA_NAMES.values() and belonging_checked == 0:
                     belonging_checked = True
                     for key, value in AREA_NAMES.items():
