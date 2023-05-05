@@ -211,7 +211,7 @@ def get_table_values(schema, table, dict_tags, conn_params):
     return values
 
 
-def add_elements(schema, table, dict_tags, gml_fm, result_dicts, conn_params):
+def add_elements(schema, table, dict_tags, gml_fm, result_dicts, conn_params):#TODO: fix exporting features with empty geometries -> fix sijaintiepavarmuus and luontitapa going to previous element
     for n, o in globals().items():
         if o is dict_tags:
             dict_name = n
@@ -299,7 +299,7 @@ def add_elements(schema, table, dict_tags, gml_fm, result_dicts, conn_params):
                     date_time = values[i][key]
                     xsdt_str = date_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
                     c_base.text = xsdt_str
-                else:
+                elif not xml_tag.startswith("infrao:kuuluu"):
                     c_base = ET.SubElement(f, xml_tag)
                     c_base.text = str(values[i][key])
 
@@ -315,7 +315,6 @@ def xml_export(conn_params, save_file):
         "xmlns:xlink":"http://www.w3.org/1999/xlink"
         }
     result_dicts = get_area_identifiers(conn_params)
-    LOGGER.info
     root = ET.Element('infrao:InfraoKohteet',  NAMESPACES)
     gml_fm = ET.SubElement(root, GML_FEATURE_MEMBERS)
 

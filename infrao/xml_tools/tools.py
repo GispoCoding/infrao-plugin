@@ -27,7 +27,7 @@ INFRAO_HULEVESI = CORE_NS + ":Hulevesi"
 INFRAO_JATE = CORE_NS + ":Jate"
 INFRAO_KALUSTE = CORE_NS + ":Kaluste"
 INFRAO_KATUALUE = CORE_NS + ":Katualue"
-INFRAO_KATUALUEENOSA = CORE_NS + ":KatuAlueenOsa"
+INFRAO_KATUALUEENOSA = CORE_NS + ":KatualueenOsa"
 INFRAO_KESKILINJA = CORE_NS + ":Keskilinja"
 INFRAO_LEIKKIVALINE = CORE_NS + ":Leikkivaline"
 INFRAO_LIIKENNEMERKKI = CORE_NS + ":Liikennemerkki"
@@ -433,7 +433,7 @@ ELEMENT_NAMES = { #translate table name -> element name TODO: CHECK the element 
     "muuvaruste": "MuuVaruste",
     "opaste": "Opaste",
     "viheralueenosa": "ViheralueenOsa",
-    "katualueenosa": "KatuAlueenOsa",
+    "katualueenosa": "KatualueenOsa",
     "viheralue": "Viheralue",
     "katualue": "Katualue",
     "puu": "Puu",

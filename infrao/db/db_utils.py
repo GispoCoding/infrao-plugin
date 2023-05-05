@@ -101,7 +101,6 @@ def get_db_connection_params(con_name) -> Dict[str, str]:
     username_saved = parse_value(s.value("saveUsername"))
     pwd_saved = parse_value(s.value("savePassword"))
     sslmode = parse_value(s.value("sslmode"))
-    LOGGER.info(sslmode)
 
     params = {}
 

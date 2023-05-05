@@ -34,6 +34,7 @@ from .xml_tools.importer.xml_importer import xml_import
 
 from .ui.init_db import Dialog
 from .xml_tools.exporter.xml_exporter import ExportDialog
+from .xml_tools.importer.xml_importer import ImportDialog
 
 
 class Plugin:
@@ -170,7 +171,8 @@ class Plugin:
         teardown_logger(Plugin.name)
 
     def import_xml(self) -> None:
-        xml_import()
+        dialog = ImportDialog(self.iface)
+        dialog.exec_()
 
     def export_xml(self) -> None:
         dialog = ExportDialog(self.iface)

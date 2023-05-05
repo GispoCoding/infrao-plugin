@@ -122,7 +122,6 @@ class Dialog(QDialog, FORM_CLASS):
         
 
     def create_db(self, conn_params, password):
-        LOGGER.info(conn_params)
         #Old way of connecting used to avoid a psycopg2 error when running CREATE DATABASE command in newer psycopg2 versions (which QGIS uses on Linux)
         try:
             conn = psycopg2.connect(**conn_params)
