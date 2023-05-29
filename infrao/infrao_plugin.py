@@ -30,8 +30,6 @@ from infrao.qgis_plugin_tools.tools.custom_logging import setup_logger, teardown
 from infrao.qgis_plugin_tools.tools.i18n import setup_translation
 from infrao.qgis_plugin_tools.tools.resources import plugin_name, resources_path
 
-from .xml_tools.importer.xml_importer import xml_import
-
 from .ui.init_db import Dialog
 from .xml_tools.exporter.xml_exporter import ExportDialog
 from .xml_tools.importer.xml_importer import ImportDialog

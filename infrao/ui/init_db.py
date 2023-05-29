@@ -20,9 +20,7 @@
 import logging
 import psycopg2
 import psycopg2.errors
-import os
-import io
-import re
+from psycopg2.sql import SQL, Identifier, Placeholder
 
 from ..qgis_plugin_tools.tools.resources import load_ui
 
@@ -47,6 +45,8 @@ from ..qgis_plugin_tools.tools.resources import load_ui, plugin_name, resources_
 
 FORM_CLASS = load_ui('db_init.ui')
 LOGGER = logging.getLogger(plugin_name())
+
+INFRAO_ADMIN = 'infrao_admin'
 
 class Dialog(QDialog, FORM_CLASS):
     
@@ -128,10 +128,19 @@ class Dialog(QDialog, FORM_CLASS):
             conn.autocommit = True
             with conn.cursor() as curs:
                 LOGGER.info("Creating InfraO database and infrao_admin role.")
-                curs.execute("DROP ROLE IF EXISTS infrao_admin;")
-                curs.execute(f"CREATE ROLE infrao_admin WITH PASSWORD '{password}' CREATEROLE LOGIN;")
-                curs.execute(f"GRANT infrao_admin TO postgres;")
-                curs.execute("CREATE DATABASE infrao OWNER=infrao_admin TABLESPACE=ts_infrao;") #TODO: tablespace
+
+                query_droprole = SQL('DROP ROLE IF EXISTS {}').format(Identifier(INFRAO_ADMIN))
+                curs.execute(query_droprole)
+
+                query_createrole = SQL('CREATE ROLE {} WITH PASSWORD {} CREATEROLE LOGIN').format(Identifier(INFRAO_ADMIN), Placeholder())
+                curs.execute(query_createrole, (password,))
+
+                query_grant = SQL('GRANT {} TO {}').format(Identifier(INFRAO_ADMIN), Identifier('postgres'))
+                curs.execute(query_grant)
+
+                query_createdb = SQL('CREATE DATABASE {} OWNER={}').format(Identifier('infrao'), Identifier(INFRAO_ADMIN)) #TODO: tablespace
+                curs.execute(query_createdb)
+                
         except psycopg2.OperationalError:
             self.db_connection_msg()
             return

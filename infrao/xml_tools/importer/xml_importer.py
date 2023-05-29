@@ -18,14 +18,15 @@
 #  along with infrao-plugin.  If not, see <https://www.gnu.org/licenses/>.
 
 import logging
+import traceback
 
 from ...qgis_plugin_tools.tools.resources import plugin_name, load_ui
-from qgis.core import NULL
+from qgis.core import NULL, QgsCoordinateTransform, QgsProject, QgsGeometry, QgsOgcUtils
 from qgis.utils import iface
 from osgeo import ogr
 from osgeo.osr import CoordinateTransformation
 
-from lxml import etree
+from xml.etree import ElementTree as ET
 
 import psycopg2
 from psycopg2.sql import SQL, Placeholder, Identifier
@@ -43,6 +44,9 @@ import time
 CORE_NS_LONG = "{www.infra-o.fi/infrao}"
 GML_NS_LONG = "{http://www.opengis.net/gml/3.2}"
 XLINK_NS_LONG = "{http://www.w3.org/1999/xlink}"
+SYSTEM_EPSG = 3067
+SIJAINTI_TAGS = [CORE_NS_LONG + "tarkkaSijaintitieto", CORE_NS_LONG + "sijaintitieto", CORE_NS_LONG + "sijainti"]
+INFRAO_GEOMS = [CORE_NS_LONG + "piste", CORE_NS_LONG + "alue", CORE_NS_LONG + "viiva",]
 
 
 
@@ -105,7 +109,7 @@ INFRAO_ERIKOISRAKENNEKERROS_TAGS = {
     CORE_NS_LONG + "omistaja": "omistaja",
     CORE_NS_LONG + "haltija": "haltija",
     CORE_NS_LONG + "kunnossapitaja": "kunnossapitaja",
-    CORE_NS_LONG + "selite": "selite",
+    CORE_NS_LONG + "selite": "erk_selite",
     CORE_NS_LONG + "materiaali": "materiaali",
     CORE_NS_LONG + "tyyppi": "cid_erikoisrakennekerrosmateriaalityyppi",
     CORE_NS_LONG + "sijaintiepavarmuus": "cid_sijaintiepavarmuustyyppi",
@@ -167,13 +171,13 @@ INFRAO_KATUALUEENOSA_TAGS |= {
     CORE_NS_LONG + "valmistumisvuosi": "valmistumisvuosi",
     CORE_NS_LONG + "kuuluuKatualueeseen": "fid_katualue",
     #CORE_NS_LONG + "sisaltaaKeskilinja": "sisaltaakeskilinja", TODO: HANDLE THESE
-    CORE_NS_LONG + "luokka": "luokka_id",
-    CORE_NS_LONG + "laji": "katuosanlaji_id",
-    CORE_NS_LONG + "viheralueenLaji": "viherosanlajityyppi_id",
-    CORE_NS_LONG + "pintamateriaali": "pintamateriaali_id",
-    CORE_NS_LONG + "kunnossapitoluokka": "kunnossapitoluokka_id",
+    CORE_NS_LONG + "luokka": "cid_toiminnallinenluokka",
+    CORE_NS_LONG + "laji": "cid_katuosanlaji",
+    CORE_NS_LONG + "viheralueenLaji": "cid_viherosanlajityyppi",
+    CORE_NS_LONG + "pintamateriaali": "cid_pintamateriaali",
+    CORE_NS_LONG + "kunnossapitoluokka": "cid_hoitoluokkatyyppi",
     #"SUUNNITELMALINKKITIETO": [CORE_NS + ":suunnitelmalinkkitieto": "": #TODO: add later
-    CORE_NS_LONG + "talvihoidonLuokka": "talvihoidonluokka_id",
+    CORE_NS_LONG + "talvihoidonLuokka": "cid_talvihoidonluokka",
     #CORE_NS_LONG + "sisaltaaKasvillisuus": "sisaltaakasvillisuus",
     #CORE_NS_LONG + "sisaltaaVaruste": "sisaltaavaruste",
     CORE_NS_LONG + "sijaintiepavarmuus": "cid_sijaintiepavarmuustyyppi",
@@ -303,14 +307,14 @@ INFRAO_VIHERALUEENOSA_TAGS |= {
     CORE_NS_LONG + "valmistumisvuosi": "valmistumisvuosi",
     CORE_NS_LONG + "suojelualuekytkin": "suojelualuekytkin",
     CORE_NS_LONG + "kuuluuViheralueeseen": "fid_viheralue",
-    CORE_NS_LONG + "kayttotarkoitus": "kayttotarkoitus_id",
-    CORE_NS_LONG + "laji": "laji_id",
-    CORE_NS_LONG + "hoitoluokka": "hoitoluokka_id",
-    CORE_NS_LONG + "katualueenLaji": "katualueenlaji_id",
-    CORE_NS_LONG + "suunnitelmalinkkitieto": "suunnitelmalinkkitieto_id",
-    CORE_NS_LONG + "talvihoidonLuokka": "talvihoidonluokka_id",
-    CORE_NS_LONG + "puhtaanapitoluokka": "puhtaanapitoluokka_id",
-    CORE_NS_LONG + "muutoshoitoluokka": "muutoshoitoluokka_id",
+    CORE_NS_LONG + "kayttotarkoitus": "cid_viheralueenkayttotarkoitus",
+    CORE_NS_LONG + "laji": "cid_viherosanlajityyppi",
+    CORE_NS_LONG + "hoitoluokka": "cid_hoitoluokkatyyppi",
+    CORE_NS_LONG + "katualueenLaji": "cid_katuosanlaji",
+    #CORE_NS_LONG + "suunnitelmalinkkitieto": "suunnitelmalinkkitieto_id",
+    CORE_NS_LONG + "talvihoidonLuokka": "cid_talvihoidonluokka",
+    CORE_NS_LONG + "puhtaanapitoluokka": "cid_puhtaanapitoluokkatyyppi",
+    CORE_NS_LONG + "muutoshoitoluokka": "cid_muutoshoitoluokkatyyppi",
     #CORE_NS_LONG + "sisaltaaKasvillisuus": "sisaltaakasvillisuus",
     #CORE_NS_LONG + "sisaltaaVaruste": "sisaltaavaruste",
     CORE_NS_LONG + "sijaintiepavarmuus": "cid_sijaintiepavarmuustyyppi",
@@ -386,10 +390,16 @@ AREA_TAG_TO_TABLE = {
     CORE_NS_LONG + "kuuluuKatuAlueenOsaan": "katualueenosa",
 }
 
+SRS_LIST = [
+    "3067",
+    "4326",
+    "3877",
+]
+
 FORM_CLASS = load_ui('import.ui')
 LOGGER = logging.getLogger(plugin_name())
 
-def get_area_fids(conn_params): #TODO: modify the function so that the result is a dictionary where identifier -> fid
+def get_area_fids(conn_params):
     results_dicts = {"viheralueenosa": [],
                      "katualueenosa": [],
                      "viheralue": [],
@@ -400,7 +410,7 @@ def get_area_fids(conn_params): #TODO: modify the function so that the result is
         else:
             schema = "viheralue"
 
-        query = f"SELECT fid, identifier FROM {schema}.{key};" # TODO: use psycopg2.sql
+        query = SQL("SELECT {}, {} FROM {}.{}").format(Identifier("fid"), Identifier("identifier"), Identifier(schema), Identifier(key))
 
         with(psycopg2.connect(**conn_params)) as conn:
             with conn.cursor() as curs:
@@ -412,44 +422,131 @@ def get_area_fids(conn_params): #TODO: modify the function so that the result is
                 results_dicts[key] = result_dict
     return results_dicts
 
-def get_values_from_xml(table, file_path, results_dicts): # TODO: handle timestamps
+def get_values_from_xml(table, file_path, results_dicts, conn_params): # TODO: handle timestamps
+    start = time.time()
     element = TABLE_TO_ELEMENT[table][0]
     element_dict = TABLE_TO_ELEMENT[table][1]
 
-    tree = etree.parse(file_path)
+    tree = ET.parse(file_path)
     root = tree.getroot()
-
+    #LOGGER.info(element)
     values_dict = []
-    for feature in root.iter(element):
-        value_dict = {key: None for key in element_dict.values()}
-        for child in feature.iter():
-            if child.tag in element_dict.keys():
-                if not child.tag in [CORE_NS_LONG + "kuuluuKatualueeseen", CORE_NS_LONG + "kuuluuViheralueeseen", CORE_NS_LONG + "kuuluuKatuAlueenOsaan", CORE_NS_LONG + "kuuluuViheralueenOsaan", CORE_NS_LONG + "tarkkaSijaintitieto", CORE_NS_LONG + "sijaintitieto", CORE_NS_LONG + "sijainti", CORE_NS_LONG + "Sijainti", CORE_NS_LONG + "piste", CORE_NS_LONG + "viiva", CORE_NS_LONG + "alue", CORE_NS_LONG + "alkuHetki", CORE_NS_LONG + "loppuHetki",] and not child.tag.startswith(GML_NS_LONG):
-                    value_dict[element_dict[child.tag]] = child.text
-                elif child.tag in [CORE_NS_LONG + "alue", CORE_NS_LONG + "viiva", CORE_NS_LONG + "piste"] or table == 'keskilinja' and child.tag == CORE_NS_LONG + "sijainti": #TODO: check SRS
-                    gml_elem = child.find('*')
-                    gml_string = etree.tostring(gml_elem).decode('utf-8')
-                    geom = ogr.CreateGeometryFromGML(gml_string)
-                    if geom:
-                        value_dict[element_dict[child.tag]] = geom.ExportToWkb()
-                elif child.tag.startswith(CORE_NS_LONG + "kuuluu"):
-                    try:
-                        belong_attrib = child.attrib[XLINK_NS_LONG + "href"]
-                        dot_pos = belong_attrib.find('.')
-                        if dot_pos != -1:
-                            id = belong_attrib[dot_pos + 1:]
+    #LOGGER.info(table)
+    features = root.findall(f".//{element}")
+    #LOGGER.info(list(element_dict.keys()))
+    tags = list(element_dict.keys())#.append(CORE_NS_LONG + "Sijainti")
+    if table != "katualue" or table != "viheralue":
+        tags.extend(SIJAINTI_TAGS)
+    for feature in features:
+        #LOGGER.info(feature)
+        value_dict = {key: "Tyhjä" if key.startswith("cid_") else None for key in element_dict.values()}
+        for tag in tags:
+            child = feature.find(f"./{tag}")
+            if child is not None:
+                if child.text == None or len(element) > 0:
+                    if not child.tag in [CORE_NS_LONG + "kuuluuKatualueeseen", CORE_NS_LONG + "kuuluuViheralueeseen", CORE_NS_LONG + "kuuluuKatuAlueenOsaan", CORE_NS_LONG + "kuuluuViheralueenOsaan", CORE_NS_LONG + "tarkkaSijaintitieto", CORE_NS_LONG + "sijaintitieto", CORE_NS_LONG + "sijainti",]:
+                        value_dict[element_dict[child.tag]] = child.text
+                    elif child.tag in SIJAINTI_TAGS or table == 'keskilinja' and child.tag == CORE_NS_LONG + "sijainti":
+                        gml_elem = None
+                        geom = None
+                        if table != "keskilinja":
+                            sij_creation = child.find(f"./*/{CORE_NS_LONG}luontitapa")
+                            sij_uncertainty = child.find(f"./*/{CORE_NS_LONG}sijaintiepavarmuus")
+                            if sij_creation is not None:
+                                value_dict[element_dict[sij_creation.tag]] = sij_creation.text
+                            if sij_uncertainty is not None:
+                                value_dict[element_dict[sij_uncertainty.tag]] = sij_uncertainty.text
+                            for sij_child in child:
+                                for geom_type in INFRAO_GEOMS:
+                                    io_geom_element = sij_child.find(f"./{geom_type}")
+                                    if io_geom_element is not None:
+                                        #LOGGER.info(io_geom_element)
+                                        sij_key = io_geom_element.tag
+                                        #LOGGER.info(sij_key)
+                                        gml_elem = io_geom_element.find('*')
+                                        #LOGGER.info(gml_elem)
+                        else:
+                            gml_elem = child.find('*')
+                            sij_key = child.tag
+                        if gml_elem is not None:
+                            gml_string = ET.tostring(gml_elem).decode('utf-8')
+                            #LOGGER.info(gml_string)
+                            geom = ogr.CreateGeometryFromGML(gml_string)
+                            #LOGGER.info(geom)
+                        if geom is not None:
+                            geom_type = geom.GetGeometryType()
+                            #LOGGER.info(geom_type)
+                            if geom_type == 1010 or geom_type == 10:
+                                geom = ogr.ForceToPolygon(geom)
+                            if geom_type == 9 or geom_type == 1009 or geom_type == 8 or geom_type == 1008:
+                                geom = ogr.ForceToLineString(geom)
+                            geom_wkb = geom.ExportToWkb()
+                            if "srsName" in gml_elem.attrib:
+                                match = next((srs for srs in SRS_LIST if srs in gml_elem.attrib["srsName"]), None)
+                                if match:
+                                    source_crs = QgsProject.instance().crs().fromEpsgId(int(match))
+                                    target_crs = QgsProject.instance().crs().fromEpsgId(SYSTEM_EPSG)
+
+                                    qgs_geom = QgsGeometry()
+                                    qgs_geom.fromWkb(geom_wkb)
+                                    transform = QgsCoordinateTransform(source_crs, target_crs, QgsProject.instance())
+
+                                    qgs_geom.transform(transform)
+                                    
+                                    geom_wkb = bytes(qgs_geom.asWkb())
+                            geom.Set3D(True)
                             try:
-                                value_dict[element_dict[child.tag]] = results_dicts[AREA_TAG_TO_TABLE[child.tag]][id]
+                                value_dict[element_dict[sij_key]] = geom_wkb
                             except:
-                                LOGGER.info(f"Kohteen {feature.tag} sisältävän alueen yksilöintitietoa ei löytynyt.")
-                    except KeyError:
-                        LOGGER.info(f"Kohteen {feature.tag} elementti {child.tag} ei sisällä xlink- attribuuttia.")
+                                LOGGER.info(f"Ongelma kohteen {feature.tag}.{value_dict.get(element_dict[CORE_NS_LONG + 'yksilointitieto'])} geometrian lisäämisessä.")
+                        else:
+                            #LOGGER.info(f"Ongelma kohteen {feature.tag}.{value_dict.get(element_dict[CORE_NS_LONG + 'yksilointitieto'])} geometrian lukemisessa.")
+                            #value_dict[element_dict[sij_key]] = None
+                            pass
+                    elif child.tag.startswith(CORE_NS_LONG + "kuuluu"):
+                        try:
+                            belong_attrib = child.attrib[XLINK_NS_LONG + "href"]
+                            dot_pos = belong_attrib.find('.')
+                            if dot_pos != -1:
+                                id = belong_attrib[dot_pos + 1:]
+                                try:
+                                    value_dict[element_dict[child.tag]] = results_dicts[AREA_TAG_TO_TABLE[child.tag]][id]
+                                except:
+                                    LOGGER.info(f"Kohteen {feature.tag}.{value_dict.get(element_dict[CORE_NS_LONG + 'yksilointitieto'])} sisältävän alueen yksilöintitietoa ei löytynyt.")
+                                    pass
+                        except KeyError:
+                            #LOGGER.info(f"Kohteen {feature.tag} elementti {child.tag} ei sisällä xlink- attribuuttia.")
+                            pass
+        start__ = time.time()
+        #LOGGER.info(value_dict)
+        for el in value_dict:
+            if el.startswith("cid_") and value_dict[el] is not None:
+                query = SQL("SELECT {} FROM {}.{} WHERE {} = {}").format(Identifier("cid"), Identifier("koodistot"), Identifier(el.removeprefix('cid_')), Identifier("selite"), Placeholder())
+                with(psycopg2.connect(**conn_params)) as conn:
+                    with conn.cursor() as curs:
+                        curs.execute(query, [value_dict[el]])
+                        try:
+                            cid = curs.fetchone()
+                            if cid is not None:
+                                cid = cid[0]
+                            value_dict[el] = cid
+                        except TypeError as e:
+                            LOGGER.info(f"Virhe sarakkeen {el} hakemisessa.")
+                            LOGGER.info(e)
+                            LOGGER.info(traceback.format_exc())
+                            value_dict[el] = None
+        end__ = time.time()
+        LOGGER.info(f"TIME ELAPSED SQL QUERY: {round(((end__-start__) * 10**3)/1000, 2)} seconds.")
         values_dict.append(value_dict)
+    end = time.time()
+    if values_dict != []:
+        LOGGER.info(f"TIME ELAPSED FUNCTION: {round(((end-start) * 10**3)/1000, 2)} seconds.")
     return values_dict
 
 
 def build_sql_query(values_dict, schema, table):
     table_name = Identifier(schema, table)
+
 
     keys = list(values_dict[0].keys())
     values = [value for dict in values_dict for value in dict.values()]
@@ -480,30 +577,30 @@ def xml_import(conn_params, file_path):
     LOGGER.info("========================================XML IMPORT STARTED========================================")
     
     for schema, table in AREA_TABLE_LIST:
-        values_dict = get_values_from_xml(table, file_path, None)
+        values_dict = get_values_from_xml(table, file_path, None, conn_params)
         if not values_dict == []:
-            LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
+            #LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
             query, values = build_sql_query(values_dict, schema, table)
             add_features_to_database(query, values, conn_params)
-            LOGGER.info(f"Kohteet lisätty tauluun: {table}")
+            #LOGGER.info(f"Kohteet lisätty tauluun: {table}")
     results_dicts = get_area_fids(conn_params)
 
     for schema, table in AREA_PART_TABLE_LIST:
-        values_dict = get_values_from_xml(table, file_path, results_dicts)
+        values_dict = get_values_from_xml(table, file_path, results_dicts, conn_params)
         if not values_dict == []:
-            LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
+            #LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
             query, values = build_sql_query(values_dict, schema, table)
             add_features_to_database(query, values, conn_params)
-            LOGGER.info(f"Kohteet lisätty tauluun: {table}")
+            #LOGGER.info(f"Kohteet lisätty tauluun: {table}")
     results_dicts = get_area_fids(conn_params)
 
     for schema, table in TABLE_LIST:
-        values_dict = get_values_from_xml(table, file_path, results_dicts)
+        values_dict = get_values_from_xml(table, file_path, results_dicts, conn_params)
         if not values_dict == []:
-            LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
+            #LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
             query, values = build_sql_query(values_dict, schema, table)
             add_features_to_database(query, values, conn_params)
-            LOGGER.info(f"Kohteet lisätty tauluun: {table}")
+            #LOGGER.info(f"Kohteet lisätty tauluun: {table}")
 
     canvas = iface.mapCanvas()
     canvas.refreshAllLayers()
@@ -526,6 +623,13 @@ class ImportDialog(QDialog, FORM_CLASS):
         self.closeButton.clicked.connect(self.close)
         self.filePathButton.clicked.connect(self.get_file_path)
         self.importButton.clicked.connect(self.execute)
+        self.srsSelect.setCrs(QgsProject.instance().crs())
+        self.srsCheckBox.clicked.connect(self.checkbox_clicked)
+        self.srsSelect.setVisible(False)
+
+
+    def checkbox_clicked(self):
+        self.srsSelect.setVisible(True)
 
     
     def get_file_path(self):
