@@ -29,11 +29,8 @@ from ...db.db_utils import get_db_connection_params
 from ...ui.ask_credentials import DbAskCredentialsDialog
 
 from ...qgis_plugin_tools.tools.resources import plugin_name, load_ui
-from ..export_tools import (
-    AINEISTO_TILA,
-    INFRAO_AINEISTOTOIMITUKSEN_TIEDOT,
-    xml_export
-)
+from ..export_tools import AINEISTO_TILA, INFRAO_AINEISTOTOIMITUKSEN_TIEDOT, xml_export
+
 
 FORM_CLASS = load_ui('export.ui')
 LOGGER = logging.getLogger(plugin_name())
@@ -52,7 +49,7 @@ class ExportDialog(QDialog, FORM_CLASS):
         self.closeButton.clicked.connect(self.close)
         self.filePathButton.clicked.connect(self.get_file_path)
         self.exportButton.clicked.connect(self.execute)
-        #self.filePathLineEdit.setText("") # Fill in a file path for quick testing
+        self.filePathLineEdit.setText("C:/Users/juho-/Desktop/testi.gml") # Fill in a file path for quick testing
         self.exportShipmentInformation.clicked.connect(self.shipment_information_export_clicked)
 
         self.shipment_information = {}
@@ -65,12 +62,14 @@ class ExportDialog(QDialog, FORM_CLASS):
         for value in AINEISTO_TILA:
             self.tt_tila.addItem(value)
 
+    
     def shipment_information_export_clicked(self):
         self.export_shipment_information = not self.exportShipmentInformation.isChecked()
         for key in INFRAO_AINEISTOTOIMITUKSEN_TIEDOT.keys():
             widget = getattr(self, "tt_" + key)
             widget.setEnabled(self.export_shipment_information)
     
+
     def get_file_path(self):
         save_file, _ = QFileDialog.getSaveFileName(None, "Save File", "", "GML Files (*.gml)")
         if save_file:

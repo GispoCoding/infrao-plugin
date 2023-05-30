@@ -589,7 +589,7 @@ PLAN_LINK_TABLES = [
 
 LOGGER = logging.getLogger(plugin_name())
 
-def get_decree_attachments(conn_params):
+def get_decree_attachments(conn_params: dict) -> dict:
     """
     Fetches and attaches decrees (päätös) and their attachments (liite) to the corresponding part of street area (katualueenosa).
 
@@ -599,7 +599,7 @@ def get_decree_attachments(conn_params):
         conn_params (dict): Connection parameters to the postgis database.
 
     Returns:
-        Dict: A dictionary where the fids of katualueenosa feature are keys and the decree and their attachment information are the values as lists of dictionaries.s
+        dict: A dictionary where the fids of katualueenosa feature are keys and the decree and their attachment information are the values as lists of dictionaries.
     """
     with(psycopg2.connect(**conn_params)) as conn:
         with conn.cursor(cursor_factory=DictCursor) as curs:
@@ -661,7 +661,7 @@ def get_decree_attachments(conn_params):
     return decree_attachments
 
 
-def get_plan_link(conn_params):
+def get_plan_link(conn_params: dict) -> dict:
     """
     Fetches all the plan link infromation (suunnitelmalinkkitieto) features and matches them with the features they belong to.
 
@@ -711,7 +711,7 @@ def get_plan_link(conn_params):
     return plan_links_dict
 
 
-def get_area_identifiers(conn_params):
+def get_area_identifiers(conn_params: dict) -> dict:
     """
     Fetches information about what area different features belong to.
 
@@ -753,10 +753,22 @@ def get_area_identifiers(conn_params):
     return results_dicts
 
 
-def get_table_values(schema, table, dict_tags, conn_params):
+def get_table_values(schema: str, table: str, element_tags: dict, conn_params: dict) -> list:
+    """
+    Fetches the values from a table.
+
+    Args:
+        schema (str): The name of the table's schema.
+        table (str): The name of the table.
+        element_tags (str): Dictionary containing the XML tag name and corresponding column in the table.
+        conn_params (dict): Connection parameters to the postgis database.
+
+    Returns:
+        list: A list of dictionaries. Each dictionary contains the values of a single feature.
+    """
     columns = []
     cids = []
-    for k, v in dict_tags.items():
+    for k, v in element_tags.items():
         if v[1] == "skip":
             columns.append((SQL("0"), Identifier(k)))
         elif v[1].startswith("geom") or v[0] in LOCATION_TAGS:
@@ -789,8 +801,22 @@ def get_table_values(schema, table, dict_tags, conn_params):
     return values
 
 
-def add_address(c_sij, xml_tag, conn_params, schema, table, value):
-    c_osoitetieto = ET.SubElement(c_sij, xml_tag)
+def add_address(sijainti_element: ET.Element, xml_tag: str, conn_params: dict, schema: str, table: str, value) -> None:
+    """
+    Adds address elements to an existing XML element.
+
+    Args:
+        sijainti_element (ET.Element): The XML element the function adds child elements to.
+        xml_tag (str): The XML tag of the element currently being added.
+        conn_params (dict): Connection parameters to the postgis database.
+        schema (str): The name of the table's schema.
+        table (str): The name of the table.
+        value: The value of the element currently being iterated over.
+
+    Returns:
+        None
+    """
+    c_osoitetieto = ET.SubElement(sijainti_element, xml_tag)
     c_osoite = ET.SubElement(c_osoitetieto, INFRAO_OSOITE)
     with(psycopg2.connect(**conn_params)) as conn:
         conn.autocommit = True
@@ -850,15 +876,32 @@ def add_address(c_sij, xml_tag, conn_params, schema, table, value):
                         c_osoite_geom.append(c_osoite_geom_element)
 
 
-def add_elements(schema, table, dict_tags, gml_fm, result_dicts, conn_params, values, plan_links_dict, decree_attachments):
+def add_elements(schema: str, table: str, element_tags: dict, gml_fm: ET.Element, areas_elements: dict, conn_params: dict, values: list, plan_links_dict: dict, decree_attachments: dict) -> None:
+    """
+    Main loop for iterating over the value dictionaries for each table and adding corresponding XML elements and their values.
+
+    Args:
+        schema (str): The name of the table's schema.
+        table (str): The name of the table.
+        element_tags (str): Dictionary containing the XML tag name and corresponding column in the table.
+        gml_fm (ET.Element): The gml:featureMembers element child elements are added to.
+        areas_elements (dict): Dictionary containing which elements belong to are elements (katualue etc.)
+        conn_params (dict): Connection parameters to the postgis database.
+        values (list): List of dictionaries containing the values for each element being added.
+        plan_links_dict (dict): Dictionary containing the corresponding suunnitelmalinkkitieto feature data for each element (if exists).
+        decree_attachments (dict): A dictionary where the fids of katualueenosa feature are keys and the decree and their attachment information are the values as lists of dictionaries.
+        
+    Returns:
+        None
+    """
     for n, o in globals().items():
-        if o is dict_tags:
+        if o is element_tags:
             dict_name = n
             break
     base_element_name = dict_name[:-5]
     base_element = globals()[base_element_name]
 
-    location_tag = next(((k_, v_[0]) for k_, v_ in dict_tags.items() if v_[0] in LOCATION_TAGS and not k_.startswith("GEOM_")), None)
+    location_tag = next(((k_, v_[0]) for k_, v_ in element_tags.items() if v_[0] in LOCATION_TAGS and not k_.startswith("GEOM_")), None)
 
     if table in PLAN_LINK_TABLES:
         table_plan_links = plan_links_dict[table]
@@ -881,7 +924,7 @@ def add_elements(schema, table, dict_tags, gml_fm, result_dicts, conn_params, va
             gml_genericmetadata = ET.SubElement(gml_metadataproperty, "gml:GenericMetaData")
         
         for key in values[i]:
-            xml_tag = dict_tags[key][0]
+            xml_tag = element_tags[key][0]
             if xml_tag in LOCATION_TAGS and empty_geometry == True and not location_created:
                 location_created = True
                 c_base = ET.SubElement(f, xml_tag)
@@ -921,7 +964,7 @@ def add_elements(schema, table, dict_tags, gml_fm, result_dicts, conn_params, va
                 elif xml_tag in AREA_NAMES.values() and belonging_checked == 0:
                     belonging_checked = True
                     for key, value in AREA_NAMES.items():
-                        find_dict = next((d for d in result_dicts[key] if any(lst and values[i]["YKSILOINTITIETO"] in lst for lst in d.values())), None)
+                        find_dict = next((d for d in areas_elements[key] if any(lst and values[i]["YKSILOINTITIETO"] in lst for lst in d.values())), None)
                         if find_dict:
                             if find_dict['identifier'] != values[i]["YKSILOINTITIETO"]:
                                 attribs = {
@@ -931,7 +974,7 @@ def add_elements(schema, table, dict_tags, gml_fm, result_dicts, conn_params, va
                                 ET.SubElement(f, value, attribs)
                 elif any(xml_tag in i for i in AREA_INCLUDED_NAMES.values()):
                     for key, value in AREA_NAMES.items():
-                        find_dict = next((dict_item for dict_item in result_dicts[key] if dict_item.get('identifier') == values[i]['YKSILOINTITIETO']), None)
+                        find_dict = next((dict_item for dict_item in areas_elements[key] if dict_item.get('identifier') == values[i]['YKSILOINTITIETO']), None)
                         if find_dict is not None:
                             for k, v in find_dict.items():
                                 if v == None or k == "identifier":
@@ -1030,7 +1073,18 @@ def add_elements(schema, table, dict_tags, gml_fm, result_dicts, conn_params, va
                     c_base.text = str(values[i][key])
 
 
-def add_shipment_information(root, shipment_information, conn_params):
+def add_shipment_information(root: ET.Element, shipment_information: dict, conn_params: dict) -> None:
+    """
+    Adds shipment information (infrao:toimituksentiedot) elements to the XML root element.
+
+    Args:
+        root (ET.Element): The root element of the XML document (infrao:InfraoKohteet).
+        shipment_information (dict): Dictionary containing the shipment information.
+        conn_params (dict): Connection parameters to the postgis database.
+
+    Returns:
+        None
+    """
     shipment_information_grandparent = ET.SubElement(root, "infrao:toimituksentiedot")
     shipment_information_parent = ET.SubElement(shipment_information_grandparent, "infrao:Toimitus")
 
@@ -1053,10 +1107,18 @@ def add_shipment_information(root, shipment_information, conn_params):
             curs.execute(query, list(shipment_information.values()))
             
     
+def xml_export(conn_params: dict, save_file: str, shipment_information: dict) -> None:
+    """
+    Adds the needed root elements, runs the relevant functions iteratively for each table.
     
+    Args:
+        conn_params (dict): Connection parameters to the postgis database.
+        save_file (str): File path for the .gml document being created.
+        shipment_information (dict): Dictionary containing the shipment information.
 
-
-def xml_export(conn_params, save_file, shipment_information):
+    Returns:
+        None
+    """
     start = time.time()
     LOGGER.info("========================================XML EXPORT STARTED========================================")
     NAMESPACES = {
@@ -1068,16 +1130,15 @@ def xml_export(conn_params, save_file, shipment_information):
     
     plan_links_dict = get_plan_link(conn_params)
     decree_attachments = get_decree_attachments(conn_params)
-    result_dicts = get_area_identifiers(conn_params)
+    areas_elements = get_area_identifiers(conn_params)
     root = ET.Element('infrao:InfraoKohteet',  NAMESPACES)
     gml_fm = ET.SubElement(root, GML_FEATURE_MEMBERS)
 
     for key, value in SCHEMA_TABLE_NAMES.items():
         try:
             table_values = get_table_values(key[0], key[1], value, conn_params)
-            #get_table_values(schema, table, dict_tags, conn_params)
             if not table_values == []:
-                add_elements(key[0], key[1], value, gml_fm, result_dicts, conn_params, table_values, plan_links_dict, decree_attachments)
+                add_elements(key[0], key[1], value, gml_fm, areas_elements, conn_params, table_values, plan_links_dict, decree_attachments)
         except Exception as e:
             LOGGER.info(f"Ongelma taulun {key[1]} viemisessä.")
             iface.messageBar().pushMessage(f"Ongelma taulun {key[1]} viemisessä.", level=1, duration=10)
