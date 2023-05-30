@@ -49,7 +49,7 @@ class ExportDialog(QDialog, FORM_CLASS):
         self.closeButton.clicked.connect(self.close)
         self.filePathButton.clicked.connect(self.get_file_path)
         self.exportButton.clicked.connect(self.execute)
-        self.filePathLineEdit.setText("C:/Users/juho-/Desktop/testi.gml") # Fill in a file path for quick testing
+        #self.filePathLineEdit.setText("") # Fill in a file path for quick testing
         self.exportShipmentInformation.clicked.connect(self.shipment_information_export_clicked)
 
         self.shipment_information = {}
@@ -62,7 +62,7 @@ class ExportDialog(QDialog, FORM_CLASS):
         for value in AINEISTO_TILA:
             self.tt_tila.addItem(value)
 
-    
+
     def shipment_information_export_clicked(self):
         self.export_shipment_information = not self.exportShipmentInformation.isChecked()
         for key in INFRAO_AINEISTOTOIMITUKSEN_TIEDOT.keys():
