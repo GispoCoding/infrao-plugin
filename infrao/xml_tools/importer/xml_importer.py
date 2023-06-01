@@ -30,6 +30,7 @@ from xml.etree import ElementTree as ET
 
 import psycopg2
 from psycopg2.sql import SQL, Placeholder, Identifier
+from psycopg2.extras import DictCursor
 
 from ...ui.init_db import Dialog as DLG
 from ...db.db_utils import get_db_connection_params
@@ -43,6 +44,7 @@ import time
 
 CORE_NS_LONG = "{www.infra-o.fi/infrao}"
 GML_NS_LONG = "{http://www.opengis.net/gml/3.2}"
+GML_NS_LONG_DICT = {"gml": "http://www.opengis.net/gml/3.2"}
 XLINK_NS_LONG = "{http://www.w3.org/1999/xlink}"
 SYSTEM_EPSG = 3067
 SIJAINTI_TAGS = [CORE_NS_LONG + "tarkkaSijaintitieto", CORE_NS_LONG + "sijaintitieto", CORE_NS_LONG + "sijainti"]
@@ -52,7 +54,15 @@ INFRAO_GEOMS = [CORE_NS_LONG + "piste", CORE_NS_LONG + "alue", CORE_NS_LONG + "v
 
 # infrao abstractpaikkatietopalvelukohde tags
 INFRAO_ABSTRACT_PAIKKATIETOPALVELUKOHDE = {
-    CORE_NS_LONG + "metatieto": "metatieto",
+    CORE_NS_LONG + ":metatieto": "skip",
+    CORE_NS_LONG + ":osoitetieto": "skip",
+    "datan_luoja": "meta_datanluoja",
+    "muokkaaja": "meta_muokkaaja",
+    "muokkaus_pvm": "meta_muokkauspvm",
+    "omistaja": "meta_omistaja",
+    "lahteen_pvm": "meta_lahteenpvm",
+    "mittausera": "meta_mittausera",
+    "lisatieto_linkki": "meta_lisatietolinkki",
     CORE_NS_LONG + "yksilointitieto": "identifier",
     CORE_NS_LONG + "alkuHetki": "alkuhetki",
     CORE_NS_LONG + "loppuHetki": "loppuhetki",
@@ -383,6 +393,35 @@ TABLE_TO_ELEMENT = {
     "ymparistotaide": [CORE_NS_LONG + "Ymparistotaide", INFRAO_YMPARISTOTAIDE_TAGS],
 }
 
+LOCATION_CREATION_ENUMERATION = {
+    "digitointi": 1,
+    "kiinteistötoimitus": 2,
+    "kuvamittaus": 3,
+    "laserkeilattu": 4,
+    "maastomittaus": 5,
+    "skannattu": 6,
+    "tuntematon": 7,
+    "muu": 8,
+    "-1": 9,
+}
+
+LOCATION_UNCERTAINTY_ENUMERATION = {
+    "0.15": 1,
+    "0.2": 2,
+    "0.3": 3,
+    "0.5": 4,
+    "0.7": 5,
+    "1.0": 6,
+    "1.5": 7,
+    "2.0": 8,
+    "3.0": 9,
+    "5.0": 10,
+    "7.5": 11,
+    "10.0": 12,
+    "20.0": 13,
+    "-1": 14,
+}
+
 AREA_TAG_TO_TABLE = {
     CORE_NS_LONG + "kuuluuViheralueeseen": "viheralue",
     CORE_NS_LONG + "kuuluuKatualueeseen": "katualue",
@@ -422,8 +461,21 @@ def get_area_fids(conn_params):
                 results_dicts[key] = result_dict
     return results_dicts
 
-def get_values_from_xml(table, file_path, results_dicts, conn_params): # TODO: handle timestamps
-    start = time.time()
+
+def add_enumeration_values(conn_params, enumeration_tables, column):
+    query = f"SELECT selite, cid FROM koodistot.{column.removeprefix('cid_')}" # TODO: use psycopg2.sql
+    #query = "SELECT selite, cid FROM koodistot.kunnossapitoluokka"
+    with(psycopg2.connect(**conn_params)) as conn:
+        with conn.cursor(cursor_factory=DictCursor) as curs:
+            curs.execute(query)
+            results = dict(curs.fetchall())
+            enumeration_tables[column] = results
+            #LOGGER.info(f"{column}: {results}")
+            #LOGGER.info(query)
+    return enumeration_tables
+
+
+def get_values_from_xml(table, file_path, results_dicts, conn_params, enumeration_tables):
     element = TABLE_TO_ELEMENT[table][0]
     element_dict = TABLE_TO_ELEMENT[table][1]
 
@@ -439,13 +491,38 @@ def get_values_from_xml(table, file_path, results_dicts, conn_params): # TODO: h
         tags.extend(SIJAINTI_TAGS)
     for feature in features:
         #LOGGER.info(feature)
-        value_dict = {key: "Tyhjä" if key.startswith("cid_") else None for key in element_dict.values()}
+        value_dict = {key: "-1" if key.startswith("cid_") else None for key in element_dict.values() if key != "skip"}
         for tag in tags:
             child = feature.find(f"./{tag}")
             if child is not None:
                 if child.text == None or len(element) > 0:
-                    if not child.tag in [CORE_NS_LONG + "kuuluuKatualueeseen", CORE_NS_LONG + "kuuluuViheralueeseen", CORE_NS_LONG + "kuuluuKatuAlueenOsaan", CORE_NS_LONG + "kuuluuViheralueenOsaan", CORE_NS_LONG + "tarkkaSijaintitieto", CORE_NS_LONG + "sijaintitieto", CORE_NS_LONG + "sijainti",]:
-                        value_dict[element_dict[child.tag]] = child.text
+                    if not child.tag in [CORE_NS_LONG + "metatieto", CORE_NS_LONG + "kuuluuKatualueeseen", CORE_NS_LONG + "kuuluuViheralueeseen", CORE_NS_LONG + "kuuluuKatuAlueenOsaan", CORE_NS_LONG + "kuuluuViheralueenOsaan", CORE_NS_LONG + "tarkkaSijaintitieto", CORE_NS_LONG + "sijaintitieto", CORE_NS_LONG + "sijainti",]:
+                        column = element_dict[child.tag]
+                        value = child.text
+                        #LOGGER.info(column)
+                        if column.startswith('cid_'):
+                            #LOGGER.info(column)
+                            enumeration_dict = enumeration_tables.get(column)
+                            if enumeration_dict is None:
+                                enumeration_tables = add_enumeration_values(conn_params, enumeration_tables, column)
+                                enumeration_dict = enumeration_tables[column]
+                            #LOGGER.info(enumeration_tables)
+                            #LOGGER.info(enumeration_dict)
+                            #LOGGER.info(value)
+                            #LOGGER.info(column)
+                            try:
+                                value = enumeration_tables[column][value]
+                            except KeyError:
+                                value = -1
+                                #LOGGER.info(f'Kohteen "{feature.tag}.{value_dict.get(element_dict[CORE_NS_LONG + "yksilointitieto"])}" enumeraatioarvo "{child.text}" kentässä "{child.tag}" ei löytynyt.')
+                                pass #TODO: do something
+                        #LOGGER.info(value)
+                        value_dict[element_dict[child.tag]] = value
+                    elif child.tag == CORE_NS_LONG + "metatieto":
+                        meta_children = child.findall("./gml:metaDataProperty/gml:GenericMetaData/*", GML_NS_LONG_DICT)
+                        if meta_children is not None:
+                            for meta_child in meta_children:
+                                value_dict[element_dict[meta_child.tag]] = meta_child.text
                     elif child.tag in SIJAINTI_TAGS or table == 'keskilinja' and child.tag == CORE_NS_LONG + "sijainti":
                         gml_elem = None
                         geom = None
@@ -453,9 +530,9 @@ def get_values_from_xml(table, file_path, results_dicts, conn_params): # TODO: h
                             sij_creation = child.find(f"./*/{CORE_NS_LONG}luontitapa")
                             sij_uncertainty = child.find(f"./*/{CORE_NS_LONG}sijaintiepavarmuus")
                             if sij_creation is not None:
-                                value_dict[element_dict[sij_creation.tag]] = sij_creation.text
+                                value_dict[element_dict[sij_creation.tag]] = LOCATION_CREATION_ENUMERATION[sij_creation.text]
                             if sij_uncertainty is not None:
-                                value_dict[element_dict[sij_uncertainty.tag]] = sij_uncertainty.text
+                                value_dict[element_dict[sij_uncertainty.tag]] = LOCATION_UNCERTAINTY_ENUMERATION[sij_uncertainty.text]
                             for sij_child in child:
                                 for geom_type in INFRAO_GEOMS:
                                     io_geom_element = sij_child.find(f"./{geom_type}")
@@ -465,6 +542,9 @@ def get_values_from_xml(table, file_path, results_dicts, conn_params): # TODO: h
                                         #LOGGER.info(sij_key)
                                         gml_elem = io_geom_element.find('*')
                                         #LOGGER.info(gml_elem)
+                            address = child.find(f"./*/{CORE_NS_LONG}osoitetieto")
+                            if address is not None:
+                                LOGGER.info(address)
                         else:
                             gml_elem = child.find('*')
                             sij_key = child.tag
@@ -512,36 +592,15 @@ def get_values_from_xml(table, file_path, results_dicts, conn_params): # TODO: h
                                 try:
                                     value_dict[element_dict[child.tag]] = results_dicts[AREA_TAG_TO_TABLE[child.tag]][id]
                                 except:
-                                    LOGGER.info(f"Kohteen {feature.tag}.{value_dict.get(element_dict[CORE_NS_LONG + 'yksilointitieto'])} sisältävän alueen yksilöintitietoa ei löytynyt.")
+                                    #LOGGER.info(f"Kohteen {feature.tag}.{value_dict.get(element_dict[CORE_NS_LONG + 'yksilointitieto'])} sisältävän alueen yksilöintitietoa ei löytynyt.")
                                     pass
                         except KeyError:
                             #LOGGER.info(f"Kohteen {feature.tag} elementti {child.tag} ei sisällä xlink- attribuuttia.")
                             pass
-        start__ = time.time()
-        #LOGGER.info(value_dict)
-        for el in value_dict:
-            if el.startswith("cid_") and value_dict[el] is not None:
-                query = SQL("SELECT {} FROM {}.{} WHERE {} = {}").format(Identifier("cid"), Identifier("koodistot"), Identifier(el.removeprefix('cid_')), Identifier("selite"), Placeholder())
-                with(psycopg2.connect(**conn_params)) as conn:
-                    with conn.cursor() as curs:
-                        curs.execute(query, [value_dict[el]])
-                        try:
-                            cid = curs.fetchone()
-                            if cid is not None:
-                                cid = cid[0]
-                            value_dict[el] = cid
-                        except TypeError as e:
-                            LOGGER.info(f"Virhe sarakkeen {el} hakemisessa.")
-                            LOGGER.info(e)
-                            LOGGER.info(traceback.format_exc())
-                            value_dict[el] = None
-        end__ = time.time()
-        LOGGER.info(f"TIME ELAPSED SQL QUERY: {round(((end__-start__) * 10**3)/1000, 2)} seconds.")
         values_dict.append(value_dict)
-    end = time.time()
-    if values_dict != []:
-        LOGGER.info(f"TIME ELAPSED FUNCTION: {round(((end-start) * 10**3)/1000, 2)} seconds.")
-    return values_dict
+    #LOGGER.info(values_dict)
+    #LOGGER.info(enumeration_tables)
+    return values_dict, enumeration_tables
 
 
 def build_sql_query(values_dict, schema, table):
@@ -575,9 +634,9 @@ def add_features_to_database(query, values, conn_params):
 def xml_import(conn_params, file_path):
     start = time.time()
     LOGGER.info("========================================XML IMPORT STARTED========================================")
-    
+    enumeration_tables = {}
     for schema, table in AREA_TABLE_LIST:
-        values_dict = get_values_from_xml(table, file_path, None, conn_params)
+        values_dict, enumeration_tables = get_values_from_xml(table, file_path, None, conn_params, enumeration_tables)
         if not values_dict == []:
             #LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
             query, values = build_sql_query(values_dict, schema, table)
@@ -586,7 +645,7 @@ def xml_import(conn_params, file_path):
     results_dicts = get_area_fids(conn_params)
 
     for schema, table in AREA_PART_TABLE_LIST:
-        values_dict = get_values_from_xml(table, file_path, results_dicts, conn_params)
+        values_dict, enumeration_tables = get_values_from_xml(table, file_path, results_dicts, conn_params, enumeration_tables)
         if not values_dict == []:
             #LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
             query, values = build_sql_query(values_dict, schema, table)
@@ -595,13 +654,13 @@ def xml_import(conn_params, file_path):
     results_dicts = get_area_fids(conn_params)
 
     for schema, table in TABLE_LIST:
-        values_dict = get_values_from_xml(table, file_path, results_dicts, conn_params)
+        values_dict, enumeration_tables = get_values_from_xml(table, file_path, results_dicts, conn_params, enumeration_tables)
         if not values_dict == []:
             #LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
             query, values = build_sql_query(values_dict, schema, table)
             add_features_to_database(query, values, conn_params)
             #LOGGER.info(f"Kohteet lisätty tauluun: {table}")
-
+    #LOGGER.info(enumeration_tables)
     canvas = iface.mapCanvas()
     canvas.refreshAllLayers()
 
@@ -623,6 +682,7 @@ class ImportDialog(QDialog, FORM_CLASS):
         self.closeButton.clicked.connect(self.close)
         self.filePathButton.clicked.connect(self.get_file_path)
         self.importButton.clicked.connect(self.execute)
+        #self.filePathLineEdit.setText("") # Fill in a file path for quick testing
         self.srsSelect.setCrs(QgsProject.instance().crs())
         self.srsCheckBox.clicked.connect(self.checkbox_clicked)
         self.srsSelect.setVisible(False)

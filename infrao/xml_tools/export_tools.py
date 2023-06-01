@@ -256,7 +256,7 @@ INFRAO_KESKILINJA_TAGS |= INFRAO_ABSTRACT_PAIKKATIETOPALVELUKOHDE
 INFRAO_KESKILINJA_TAGS |= {
     "DIGIROADID": [CORE_NS + ":DigiroadID", "digiroadid"],
     "SIJAINTI": [CORE_NS + ":sijainti", "geom"],
-    "KUULUUKATUALUEENOSAAN": [CORE_NS + ":kuuluuKatualueenOsaan", "fid_katualueenosa"],
+    "KUULUUKATUALUEENOSAAN": [CORE_NS + ":kuuluuKatuAlueenOsaan", "fid_katualueenosa"],
 }
 
 
@@ -1109,7 +1109,7 @@ def add_shipment_information(root: ET.Element, shipment_information: dict, conn_
     
 def xml_export(conn_params: dict, save_file: str, shipment_information: dict) -> None:
     """
-    Adds the needed root elements, runs the relevant functions iteratively for each table.
+    Adds the needed root elements and runs the relevant functions iteratively for each table.
     
     Args:
         conn_params (dict): Connection parameters to the postgis database.
