@@ -29,10 +29,10 @@ from qgis.utils import iface
 from infrao.qgis_plugin_tools.tools.custom_logging import setup_logger, teardown_logger
 from infrao.qgis_plugin_tools.tools.i18n import setup_translation
 from infrao.qgis_plugin_tools.tools.resources import plugin_name, resources_path
-
+    
 from .ui.init_db import Dialog
-from .xml_tools.exporter.xml_exporter import ExportDialog
-from .xml_tools.importer.xml_importer import ImportDialog
+from .infrao_xml.xml_exporter import ExportDialog
+from .infrao_xml.xml_importer import ImportDialog
 
 
 class Plugin:
