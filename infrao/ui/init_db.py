@@ -138,7 +138,7 @@ class Dialog(QDialog, FORM_CLASS):
                 query_grant = SQL('GRANT {} TO {}').format(Identifier(INFRAO_ADMIN), Identifier('postgres'))
                 curs.execute(query_grant)
 
-                query_createdb = SQL('CREATE DATABASE {} OWNER={}').format(Identifier('infrao'), Identifier(INFRAO_ADMIN)) #TODO: tablespace
+                query_createdb = SQL('CREATE DATABASE {} OWNER={} TABLESPACE=ts_infrao').format(Identifier('infrao'), Identifier(INFRAO_ADMIN)) #TODO: tablespace
                 curs.execute(query_createdb)
                 
         except psycopg2.OperationalError:
