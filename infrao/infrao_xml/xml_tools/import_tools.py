@@ -449,7 +449,20 @@ AREA_TAG_TO_TABLE = {
 SRS_LIST = [
     "3067",
     "4326",
+    "3857",
+    "3873",
+    "3874",
+    "3875",
+    "3876",
     "3877",
+    "3878",
+    "3879",
+    "3880",
+    "3881",
+    "3882",
+    "3883",
+    "3884",
+    "3885",
 ]
 
 FORM_CLASS = load_ui('import.ui')
@@ -500,18 +513,18 @@ def add_enumeration_values(conn_params: dict, enumeration_tables: dict, column:s
     return enumeration_tables
 
 
-def add_shipment_information(conn_params:dict, file_path:str) -> None:
+def add_shipment_information(conn_params:dict, tree:str) -> None:
     """
     Reads shipment information (aineistotoimituksen tiedot) from the gml file and adds it to the database.
 
     Args:
         conn_params (dict): Connection parameters to the postgis database. 
-        file_path (str): Path of the file being imported from.
+        tree (ET.ElementTree): XML tree.
     
     Returns:
         None
     """
-    tree = ET.parse(file_path)
+    #tree = ET.parse(file_path)
     root = tree.getroot()
 
     shipment_grandparent = root.find(f".//{CORE_NS_LONG + 'toimituksentiedot'}")
@@ -643,8 +656,10 @@ def add_plan_link_features(conn_params:dict, plan_link_dicts):
             with conn.cursor() as curs:
                 if feature_column == "fid_viheralueenosa":
                     sub_schema = "viheralue"
-                elif feature_column == "fid_katualueenosa":
+                elif feature_column == "fid_katualueenosa" or feature_column == "fid_ajoratamerkinta":
                     sub_schema = "katualue"
+                elif feature_column in ["fid_pysakointiruutu","fid_ymparistotaide","fid_rakenne", "fid_hulevesi"]:
+                    sub_schema = "kohteet"
                 else:
                     sub_schema = "varusteet"
 
@@ -691,18 +706,19 @@ def add_plan_link_features(conn_params:dict, plan_link_dicts):
                     curs.execute(insert_query, [plan_link_dict["suunnitelmakohdeid"], plan_link_dict["fid_liite"], feature_identifier])
 
 
-def get_values_from_xml(table: str, file_path: str, results_dicts:dict, conn_params:dict, enumeration_tables:dict, plan_link_dicts:list, decree_information_dicts:list) -> tuple[list, dict, list, list]:
+def get_values_from_xml(table: str, tree: ET.ElementTree, results_dicts:dict, conn_params:dict, enumeration_tables:dict, plan_link_dicts:list, decree_information_dicts:list, import_from_api:bool) -> tuple[list, dict, list, list]:
     """
     Main loop for iterating over the gml file and reading the elements table by table and retrieving their values to be used in building the insert query later.
 
     Args:
         table (str): Name of the table being iterated over.
-        file_path (str): Path to the file being read.
+        tree (ET.ElementTree): XML tree.
         results_dicts(dict): Dictionary containing which elements belong to are elements (katualue etc.)
         conn_params (dict): Connection parameters to the postgis database. 
         enumeration_tables (dict): Dictionary of dictionaries for reading values and if needed adding for enumeration tables.
         plan_link_dicts (list): List of plan link features to be added later being updated in this function.
         decree_information_dicts (list): List of decree features to be added later.
+        import_from_api (bool): True if importing from api, false if importing from file.
 
     Returns:
         A tuple containing the following variables:
@@ -714,11 +730,23 @@ def get_values_from_xml(table: str, file_path: str, results_dicts:dict, conn_par
     element = TABLE_TO_ELEMENT[table][0]
     element_dict = TABLE_TO_ELEMENT[table][1]
 
-    tree = ET.parse(file_path)
     root = tree.getroot()
 
     values_dict = []
-    features = root.findall(f".//{element}")
+
+    if import_from_api:
+        f_members = root.findall("{http://www.opengis.net/wfs/2.0}member")
+        if f_members == []:
+            f_members = root.findall("{http://www.opengis.net/ogcapi-features-1/1.0/sf}featureMember")
+
+        features = []
+
+        for f_member in f_members:
+            f_member_children = f_member.findall(f"./{element}") # TODO: search by tag?
+            for f_member_child in f_member_children:
+                features.append(f_member_child)
+    else:
+        features = root.findall(f".//{element}")
 
     tags = list(element_dict.keys())
 
@@ -914,17 +942,19 @@ def get_values_from_xml(table: str, file_path: str, results_dicts:dict, conn_par
                                 geom_wkb = geom.ExportToWkb()
                                 if "srsName" in gml_elem.attrib:
                                     match = next((srs for srs in SRS_LIST if srs in gml_elem.attrib["srsName"]), None)
-                                    if match:
-                                        source_crs = QgsProject.instance().crs().fromEpsgId(int(match))
-                                        target_crs = QgsProject.instance().crs().fromEpsgId(SYSTEM_EPSG)
+                                    if match is None:
+                                        match = "4326"
+                                    
+                                    source_crs = QgsProject.instance().crs().fromEpsgId(int(match))
+                                    target_crs = QgsProject.instance().crs().fromEpsgId(SYSTEM_EPSG)
 
-                                        qgs_geom = QgsGeometry()
-                                        qgs_geom.fromWkb(geom_wkb)
-                                        transform = QgsCoordinateTransform(source_crs, target_crs, QgsProject.instance())
+                                    qgs_geom = QgsGeometry()
+                                    qgs_geom.fromWkb(geom_wkb)
+                                    transform = QgsCoordinateTransform(source_crs, target_crs, QgsProject.instance())
 
-                                        qgs_geom.transform(transform)
-                                        
-                                        geom_wkb = bytes(qgs_geom.asWkb())
+                                    qgs_geom.transform(transform)
+                                    
+                                    geom_wkb = bytes(qgs_geom.asWkb())
                                 geom.Set3D(True)
                                 try:
                                     value_dict[element_dict[sij_key]] = geom_wkb
@@ -1001,13 +1031,14 @@ def add_features_to_database(query:Composed, values:list, conn_params:dict):
             curs.execute(query, values)
 
 
-def xml_import(conn_params, file_path):
+def xml_import(conn_params: dict, tree:ET.ElementTree, import_from_api:bool):
     """
     Main function for running the previous functions.
 
     Args:
         conn_params (dict): Connection parameters to the postgis database.
-        file_path (str): Path of the file being imported from.
+        tree (ET.ElementTree): XML tree.
+        import_from_api (bool): True if importing from api, false if importing from file.
     
     Returns:
         None
@@ -1021,7 +1052,7 @@ def xml_import(conn_params, file_path):
     # Iterate over the tables in this order so primary keys have been generated for related tables and update the area fid dictionary accordingly.
 
     for schema, table in AREA_TABLE_LIST:
-        values_dict, enumeration_tables, _, _ = get_values_from_xml(table, file_path, None, conn_params, enumeration_tables, plan_link_dicts, decree_information_dicts)
+        values_dict, enumeration_tables, _, _ = get_values_from_xml(table, tree, None, conn_params, enumeration_tables, plan_link_dicts, decree_information_dicts, import_from_api)
         if not values_dict == []:
             #LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
             query, values = build_sql_query(values_dict, schema, table)
@@ -1030,7 +1061,7 @@ def xml_import(conn_params, file_path):
     results_dicts = get_area_fids(conn_params)
 
     for schema, table in AREA_PART_TABLE_LIST:
-        values_dict, enumeration_tables, plan_link_dicts, decree_information_dicts = get_values_from_xml(table, file_path, results_dicts, conn_params, enumeration_tables, plan_link_dicts, decree_information_dicts)
+        values_dict, enumeration_tables, plan_link_dicts, decree_information_dicts = get_values_from_xml(table, tree, results_dicts, conn_params, enumeration_tables, plan_link_dicts, decree_information_dicts, import_from_api)
         if not values_dict == []:
             #LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
             query, values = build_sql_query(values_dict, schema, table)
@@ -1039,7 +1070,7 @@ def xml_import(conn_params, file_path):
     results_dicts = get_area_fids(conn_params)
 
     for schema, table in TABLE_LIST:
-        values_dict, enumeration_tables, plan_link_dicts, _ = get_values_from_xml(table, file_path, results_dicts, conn_params, enumeration_tables, plan_link_dicts, decree_information_dicts)
+        values_dict, enumeration_tables, plan_link_dicts, _ = get_values_from_xml(table, tree, results_dicts, conn_params, enumeration_tables, plan_link_dicts, decree_information_dicts, import_from_api)
         if not values_dict == []:
             #LOGGER.info(f"Yritetään lisätä kohteita tauluun: {table}")
             query, values = build_sql_query(values_dict, schema, table)
@@ -1050,7 +1081,7 @@ def xml_import(conn_params, file_path):
 
     add_plan_link_features(conn_params, plan_link_dicts)
     add_decrees_and_their_attachments(conn_params, decree_information_dicts)
-    add_shipment_information(conn_params, file_path)
+    add_shipment_information(conn_params, tree)
 
     # Refresh the QGIS canvas to see added features.
 
@@ -1060,4 +1091,4 @@ def xml_import(conn_params, file_path):
     end = time.time()
     LOGGER.info("========================================XML IMPORT ENDED  ========================================")
     LOGGER.info(f"TIME ELAPSED: {round(((end-start) * 10**3)/1000, 2)} seconds.")
-    iface.messageBar().pushMessage(f"Kohteet tiedostosta {file_path} tuotu onnistuneesti tietokantaan.", level=3, duration=10)
+    iface.messageBar().pushMessage(f"Kohteet tiedostosta {tree} tuotu onnistuneesti tietokantaan.", level=3, duration=10)

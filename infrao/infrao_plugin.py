@@ -33,6 +33,7 @@ from infrao.qgis_plugin_tools.tools.resources import plugin_name, resources_path
 from .ui.init_db import Dialog
 from .infrao_xml.xml_exporter import ExportDialog
 from .infrao_xml.xml_importer import ImportDialog
+from .infrao_xml.xml_api_import import ImportFromApiDialog
 
 
 class Plugin:
@@ -181,4 +182,5 @@ class Plugin:
         dialog.exec_()
 
     def import_xml_from_api(self) -> None:
-        print("Tuo xml OGC API Features:ta")
+        dialog = ImportFromApiDialog(self.iface)
+        dialog.exec_()

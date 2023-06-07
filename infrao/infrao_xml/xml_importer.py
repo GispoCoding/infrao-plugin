@@ -27,6 +27,8 @@ from ..ui.init_db import Dialog as DLG
 from ..db.db_utils import get_db_connection_params
 from ..ui.ask_credentials import DbAskCredentialsDialog
 
+from xml.etree import ElementTree as ET
+
 from PyQt5.QtWidgets import QDialog, QFileDialog
 
 from .xml_tools.import_tools import xml_import
@@ -79,8 +81,10 @@ class ImportDialog(QDialog, FORM_CLASS):
                 iface.messageBar().pushMessage("Ei voi viedä ilman käyttäjänimeä tai salasanaa.", level=1, duration=5)
                 return
         open_file = self.filePathLineEdit.value()
+
+        tree = ET.parse(open_file)
         try:
-            xml_import(conn_params, open_file)
+            xml_import(conn_params, tree, False)
         except FileNotFoundError:
             iface.messageBar().pushMessage("Virheellinen tiedostopolku. Tietoja ei voitu tuoda.", level=1, duration=5)
         except PermissionError:
