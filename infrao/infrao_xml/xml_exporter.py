@@ -71,9 +71,9 @@ class ExportDialog(QDialog, FORM_CLASS):
     
 
     def get_file_path(self):
-        save_file, _ = QFileDialog.getSaveFileName(None, "Save File", "", "GML Files (*.gml)")
+        save_file, _ = QFileDialog.getSaveFileName(None, "Save File", "", "GML Files (*.gml);;XML Files (*.xml)")
         if save_file:
-            if not save_file.endswith('.gml'):
+            if not save_file.endswith('.gml') and not save_file.endswith('.xml'):
                 save_file += '.gml'
         self.filePathLineEdit.setText(save_file)
 

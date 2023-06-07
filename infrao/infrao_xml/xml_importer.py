@@ -60,10 +60,7 @@ class ImportDialog(QDialog, FORM_CLASS):
 
     
     def get_file_path(self):
-        open_file, _ = QFileDialog.getOpenFileName(None, "Open File", "", "GML Files (*.gml)")
-        if open_file:
-            if not open_file.endswith('.gml'):
-                open_file += '.gml'
+        open_file, _ = QFileDialog.getOpenFileName(None, "Open File", "", "GML or XML Files (*.gml; *.xml)")
         self.filePathLineEdit.setText(open_file)
 
     
