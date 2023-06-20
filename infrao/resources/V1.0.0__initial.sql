@@ -80,14 +80,7 @@ CREATE SCHEMA linkit;
 ALTER SCHEMA linkit OWNER TO infrao_admin;
 -- ddl-end --
 
--- object: jakelu | type: SCHEMA --
--- DROP SCHEMA IF EXISTS jakelu CASCADE;
-CREATE SCHEMA jakelu;
--- ddl-end --
-ALTER SCHEMA jakelu OWNER TO infrao_admin;
--- ddl-end --
-
-SET search_path TO pg_catalog,public,koodistot,kohteet,meta,varusteet,katualue,viheralue,kasvillisuus,osoite,linkit,jakelu;
+SET search_path TO pg_catalog,public,koodistot,kohteet,meta,varusteet,katualue,viheralue,kasvillisuus,osoite,linkit;
 -- ddl-end --
 
 -- object: koodistot.viheralueen_kayttotarkoitus_id_seq | type: SEQUENCE --
