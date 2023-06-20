@@ -50,13 +50,6 @@ class ImportDialog(QDialog, FORM_CLASS):
         self.filePathButton.clicked.connect(self.get_file_path)
         self.importButton.clicked.connect(self.execute)
         #self.filePathLineEdit.setText("") # Fill in a file path for quick testing
-        self.srsSelect.setCrs(QgsProject.instance().crs())
-        self.srsCheckBox.clicked.connect(self.checkbox_clicked)
-        self.srsSelect.setVisible(False)
-
-
-    def checkbox_clicked(self):
-        self.srsSelect.setVisible(True)
 
     
     def get_file_path(self):

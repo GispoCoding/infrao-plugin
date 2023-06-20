@@ -42,7 +42,17 @@ QGS_SETTINGS_PSYCOPG2_PARAM_MAP = {
     'host': 'host',
     'password': 'password',
     'port': 'port',
-    'username': 'user'
+    'username': 'user',
+    'sslmode': 'sslmode',
+}
+
+QGS_SETTINGS_SSL_MODE_TO_POSTGRES = {
+    'SslDisable': 'disable',
+    'SslAllow': 'allow',
+    'SslPrefer': 'prefer',
+    'SslRequire': 'require',
+    'SslVerifyCa': 'verify-ca',
+    'SslVerifyFull': 'verify-full',
 }
 
 def fix_data_sources_from_binary_projects(conn_params, auth_cfg_id, contents):
@@ -105,7 +115,10 @@ def get_db_connection_params(con_name) -> Dict[str, str]:
     params = {}
 
     for qgs_key, psyc_key in QGS_SETTINGS_PSYCOPG2_PARAM_MAP.items():
-        params[psyc_key] = parse_value(s.value(qgs_key))
+        if psyc_key != 'sslmode':
+            params[psyc_key] = parse_value(s.value(qgs_key))
+        else:
+            params[psyc_key] = QGS_SETTINGS_SSL_MODE_TO_POSTGRES[parse_value(s.value(qgs_key))]
 
     s.endGroup()
     # username or password might have to be asked separately

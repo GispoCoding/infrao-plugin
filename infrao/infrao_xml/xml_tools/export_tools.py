@@ -258,7 +258,7 @@ INFRAO_KESKILINJA_TAGS |= INFRAO_ABSTRACT_PAIKKATIETOPALVELUKOHDE
 INFRAO_KESKILINJA_TAGS |= {
     "DIGIROADID": [CORE_NS + ":DigiroadID", "digiroadid"],
     "SIJAINTI": [CORE_NS + ":sijainti", "geom"],
-    "KUULUUKATUALUEENOSAAN": [CORE_NS + ":kuuluuKatuAlueenOsaan", "fid_katualueenosa"],
+    "KUULUUKATUALUEENOSAAN": [CORE_NS + ":kuuluuKatualueenOsaan", "fid_katualueenosa"],
 }
 
 
