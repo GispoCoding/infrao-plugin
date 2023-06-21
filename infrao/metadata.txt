@@ -1,16 +1,17 @@
 [general]
-name=InfraO
-description=
-about=
+name=Infra-O plugin
+description=Plugin for Finnish municipal asset management.
+about=A plugin for creating a database and QGIS project structure for Finnish municipal asset management. Imports and exports gml files in accordance to the Infra-O XML Schema (https://www.infra-o.fi/skeema/). For instructions on how to use, see homepage: (https://gispocoding.github.io/infraO-open/)
 version=0.1.0
 qgisMinimumVersion=3.16
-author=
-email=
+author=Gispo Ltd.
+email=info@gispo.fi
 changelog=
-tags=
-repository=https://github.com/my-organization/infrao
-tracker=https://github.com/my-organization/infrao/issues
-homepage=https://github.com/my-organization/infrao
+tags=infrao, infra-o
+repository=https://github.com/GispoCoding/infrao-plugin
+tracker=https://github.com/GispoCoding/infrao-plugin/issues
+homepage=https://gispocoding.github.io/infraO-open/
 category=Plugins
-experimental=True
+experimental=False
 deprecated=False
+icon = resources/icons/icon.png
