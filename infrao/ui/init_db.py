@@ -29,8 +29,9 @@ from qgis.utils import iface
 
 from PyQt5.QtWidgets import QDialog
 
-from ..db.db_utils import get_existing_database_connections, get_db_connection_params, set_auth_cfg, fix_data_sources_from_binary_projects
+from ..db.db_utils import get_existing_database_connections, get_db_connection_params, set_auth_cfg, fix_data_sources_from_binary_projects, check_credentials
 from ..ui.ask_credentials import DbAskCredentialsDialog
+from ..ui.ask_auth_id import DbAskAuthIdDialog
 from ..qgis_plugin_tools.tools.resources import load_ui, plugin_name, resources_path
 
 FORM_CLASS = load_ui('db_init.ui')
@@ -51,7 +52,28 @@ class Dialog(QDialog, FORM_CLASS):
         self.btnDbInitialize.setEnabled(self.agreedCheckBox.isChecked())
         self.btnDbInitialize.clicked.connect(self.init_database)
         self.openProjButton.clicked.connect(self.open_project)
-        self.refreshProjButton.clicked.connect(self.populate_projectComboBox)        
+        self.refreshProjButton.clicked.connect(self.populate_projectComboBox)
+        self.registerButton.clicked.connect(self.register_user)     
+
+
+    def register_user(self):
+        selected_db = self.dbComboBox.currentText()
+        conn_params = get_db_connection_params(selected_db)
+        check_credentials(conn_params)
+
+        auth_id = selected_db
+
+        ask_auth_dlg = DbAskAuthIdDialog()
+        ask_auth_dlg.authidEdit.setText(selected_db)
+        result = ask_auth_dlg.exec_()
+        if (result):
+            auth_id = ask_auth_dlg.authidEdit.text()
+        else:
+            ask_auth_dlg.close()
+            iface.messageBar().pushMessage("Ei voi rekisteröidä ilman autentikaatiotunnistetta.", level=1, duration=5)
+            return 
+
+        set_auth_cfg(selected_db, auth_id, conn_params['user'],conn_params['password'])
 
 
     def init_database(self):
@@ -62,17 +84,7 @@ class Dialog(QDialog, FORM_CLASS):
         
         conn_params = get_db_connection_params(selected_db)
         LOGGER.info(f"ATTEMPTING TO INITIALIZE {selected_db}")
-        if (conn_params['password'] ==  None) or (conn_params ['user'] == None):
-            LOGGER.info("No username and/or password found.")
-            ask_credentials_dlg = DbAskCredentialsDialog()
-            result = ask_credentials_dlg.exec_()
-            if (result):
-                conn_params['user'] = ask_credentials_dlg.userLineEdit.text()
-                conn_params['password'] = ask_credentials_dlg.pwdLineEdit.text()
-            else:
-                ask_credentials_dlg.close()
-                iface.messageBar().pushMessage("Ei voi alustaa ilman käyttäjänimeä tai salasanaa.", level=1, duration=5)
-                return
+        check_credentials(conn_params)
         try:
             database_created = self.run_sql(conn_params, selected_db)
         except:
@@ -138,16 +150,7 @@ class Dialog(QDialog, FORM_CLASS):
         
         if conn_params == None:
             conn_params = get_db_connection_params(selected_db)
-            if not conn_params['password'] or not conn_params['user']:
-                LOGGER.info("No username and/or password found.")
-                ask_credentials_dlg = DbAskCredentialsDialog()
-                result = ask_credentials_dlg.exec_()
-                if (result):
-                    conn_params['user'] = ask_credentials_dlg.userLineEdit.text()
-                    conn_params['password'] = ask_credentials_dlg.pwdLineEdit.text()
-                else:
-                    iface.messageBar().pushMessage("Ei voi päivittää ilman käyttäjänimeä tai salasanaa.", level=1, duration=5)
-                    return
+            check_credentials(conn_params)
                         
         selected_db = self.dbComboBox.currentText()
         LOGGER.info("Adding project")
@@ -238,16 +241,8 @@ class Dialog(QDialog, FORM_CLASS):
         conn_params_ = get_db_connection_params(selected_db)
         conn_params = self.get_auth_parameters(conn_params_, selected_db)
 
-        if not conn_params['password'] or not conn_params['user']:
-                LOGGER.info("No username and/or password found.")
-                ask_credentials_dlg = DbAskCredentialsDialog()
-                result = ask_credentials_dlg.exec_()
-                if (result):
-                    conn_params['user'] = ask_credentials_dlg.userLineEdit.text()
-                    conn_params['password'] = ask_credentials_dlg.pwdLineEdit.text()
-                else:
-                    iface.messageBar().pushMessage("Ei voi päivittää ilman käyttäjänimeä tai salasanaa.", level=1, duration=5)
-                    return
+        check_credentials(conn_params)
+
         try:
             with psycopg2.connect(**conn_params) as conn:
                 with conn.cursor() as cur:

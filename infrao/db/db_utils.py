@@ -25,6 +25,10 @@ import re
 from zipfile import ZipFile
 from typing import Dict, Union, List, Optional
 
+from qgis.utils import iface
+from ..ui.ask_credentials import DbAskCredentialsDialog
+
+
 
 from PyQt5.QtCore import QSettings
 from qgis.core import QgsAuthManager, QgsAuthMethodConfig, QgsApplication
@@ -55,12 +59,14 @@ QGS_SETTINGS_SSL_MODE_TO_POSTGRES = {
     'SslVerifyFull': 'verify-full',
 }
 
-def fix_data_sources_from_binary_projects(conn_params, auth_cfg_id, contents):
+def fix_data_sources_from_binary_projects(conn_params, auth_cfg_id, contents): #conn_params, auth_cfg_id, contents
     host = conn_params['host']
     port = conn_params['port']
     dbname = conn_params['dbname']
+    sslmode = conn_params['sslmode']
+
     ret_vals = []
-    conn_string = f"dbname='{dbname}' host={host} port={port} sslmode=allow authcfg={auth_cfg_id} key="
+    conn_string = f"dbname='{dbname}' host={host} port={port} sslmode={sslmode} authcfg={auth_cfg_id} key="
     for i, content in enumerate(contents):
         z = io.BytesIO()
         z.write(content)
@@ -69,12 +75,14 @@ def fix_data_sources_from_binary_projects(conn_params, auth_cfg_id, contents):
         qgs_f_key = [f for f in files.keys() if f.endswith('.qgs')][0]
         qgs_proj_content = files[qgs_f_key].decode('utf-8')
         # Replace all connection string from layers with the db specific connection string
-        qgs_proj_content = re.sub(r'dbname=.*host=.*port=\d{4}.*key=', conn_string, qgs_proj_content)
+        qgs_proj_content = re.sub(r'dbname=.*host=.*port=\d{4}.*sslmode=.*authcfg=.*key=', conn_string, qgs_proj_content)
         if conn_string not in qgs_proj_content:
             raise ProjectInInvalidFormat()
         files[qgs_f_key] = bytes(qgs_proj_content, 'utf-8')
         ret_vals.append(create_in_memory_zip(files))
     return ret_vals
+    
+    
 
 
 
@@ -146,9 +154,22 @@ def get_db_connection_params(con_name) -> Dict[str, str]:
     return params
 
 
+def check_credentials(conn_params):
+    if not conn_params['password'] or not conn_params['user']:
+        LOGGER.info("No username and/or password found.")
+        ask_credentials_dlg = DbAskCredentialsDialog()
+        result = ask_credentials_dlg.exec_()
+        if (result):
+            conn_params['user'] = ask_credentials_dlg.userLineEdit.text()
+            conn_params['password'] = ask_credentials_dlg.pwdLineEdit.text()
+        else:
+            ask_credentials_dlg.close()
+            iface.messageBar().pushMessage("Ei voi alustaa ilman käyttäjänimeä tai salasanaa.", level=1, duration=5)
+            return 
+
+
 def set_auth_cfg(auth_cfg_key: str, auth_cfg_id: str, username: str, password: str) -> None:
     """
-    :param plan:
     :param auth_cfg_id:
     :param username:
     :param password:
